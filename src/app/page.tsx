@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import AddLocationForm from './components/AddLocationForm';
 import DashboardStats from '@/components/DashboardStats';
+import DashboardCharts from '@/components/DashboardCharts';
 
 // Dynamically import Map component with no SSR
 const Map = dynamic(() => import('@/components/Map'), {
@@ -16,6 +17,9 @@ export default function Home() {
 
       {/* Dashboard Statistics */}
       <DashboardStats />
+
+      {/* Dashboard Charts */}
+      <DashboardCharts />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 

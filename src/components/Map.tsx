@@ -7,6 +7,12 @@ import type { Location } from '@/types/database';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
+interface WeatherData {
+  temperature: number;
+  windspeed: number;
+  weathercode: number;
+}
+
 // Fix default marker icon issue in React
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -34,6 +40,8 @@ function MapUpdater({ locations }: { locations: Location[] }) {
 export default function Map() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
+  const [weatherData, setWeatherData] = useState<{ [key: string]: WeatherData | null }>({});
+  const [weatherLoading, setWeatherLoading] = useState<{ [key: string]: boolean }>({});
 
   const fetchLocations = async () => {
     try {
@@ -55,6 +63,34 @@ export default function Map() {
   useEffect(() => {
     fetchLocations();
   }, []);
+
+  const fetchWeather = async (locationId: string, latitude: number, longitude: number) => {
+    setWeatherLoading(prev => ({ ...prev, [locationId]: true }));
+
+    try {
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`
+      );
+
+      if (!response.ok) throw new Error('Failed to fetch weather data');
+
+      const data = await response.json();
+
+      setWeatherData(prev => ({
+        ...prev,
+        [locationId]: {
+          temperature: data.current_weather.temperature,
+          windspeed: data.current_weather.windspeed,
+          weathercode: data.current_weather.weathercode,
+        }
+      }));
+    } catch (err) {
+      console.error('Error fetching weather:', err);
+      setWeatherData(prev => ({ ...prev, [locationId]: null }));
+    } finally {
+      setWeatherLoading(prev => ({ ...prev, [locationId]: false }));
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this location?')) return;
@@ -123,14 +159,38 @@ export default function Map() {
             <Marker
               key={location.id}
               position={[location.latitude, location.longitude]}
+              eventHandlers={{
+                popupopen: () => {
+                  // Fetch weather data when popup opens
+                  if (!weatherData[location.id] && !weatherLoading[location.id]) {
+                    fetchWeather(location.id, location.latitude, location.longitude);
+                  }
+                }
+              }}
             >
               <Popup>
                 <div className="text-sm">
-                  <h3 className="font-bold text-gray-900">{location.name}</h3>
+                  <h3 className="font-bold text-gray-900 mb-2">{location.name}</h3>
                   <p className="text-gray-600 capitalize">Type: {location.type}</p>
-                  <p className="text-gray-500 text-xs font-mono mb-2">
+                  <p className="text-gray-500 text-xs font-mono mb-3">
                     {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                   </p>
+
+                  {/* Weather Information */}
+                  <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-3">
+                    <p className="font-semibold text-blue-900 text-xs mb-1">Current Weather</p>
+                    {weatherLoading[location.id] ? (
+                      <p className="text-gray-600 text-xs">Loading weather...</p>
+                    ) : weatherData[location.id] ? (
+                      <div className="text-xs text-gray-700">
+                        <p className="font-medium">🌡️ {weatherData[location.id]!.temperature}°C</p>
+                        <p className="font-medium">💨 {weatherData[location.id]!.windspeed} km/h</p>
+                      </div>
+                    ) : weatherData[location.id] === null ? (
+                      <p className="text-red-600 text-xs">Failed to load weather</p>
+                    ) : null}
+                  </div>
+
                   <button
                     onClick={() => handleDelete(location.id)}
                     className="text-red-600 hover:text-red-800 text-xs font-semibold transition-colors"
