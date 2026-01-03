@@ -5,7 +5,6 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import { supabase } from '@/lib/supabase';
 import type { Location } from '@/types/database';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 
 interface WeatherData {
   temperature: number;
