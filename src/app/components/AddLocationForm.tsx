@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
-import { MapPin, Loader2 } from 'lucide-react';
+import { MapPin, Loader2, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { LocationInsert } from '@/types/database';
 
@@ -11,7 +11,46 @@ export default function AddLocationForm() {
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSearch = async () => {
+    if (!name.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a location name to search' });
+      return;
+    }
+
+    setSearching(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(name)}`
+      );
+
+      if (!response.ok) throw new Error('Failed to fetch location data');
+
+      const data = await response.json();
+
+      if (data.length === 0) {
+        setMessage({ type: 'error', text: 'No results found. Try a different search term.' });
+        return;
+      }
+
+      // Get the first result
+      const result = data[0];
+      setLatitude(result.lat);
+      setLongitude(result.lon);
+      setMessage({ type: 'success', text: `Found: ${result.display_name}` });
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to search location'
+      });
+    } finally {
+      setSearching(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -61,15 +100,33 @@ export default function AddLocationForm() {
           <label htmlFor="name" className="block text-sm font-medium text-gray-800 mb-1">
             Location Name
           </label>
-          <input
-            type="text"
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            className="w-full px-3 py-2 border border-gray-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-            placeholder="Enter location name"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="flex-1 px-3 py-2 border border-gray-800 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+              placeholder="Enter location name"
+            />
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={searching}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 whitespace-nowrap"
+              title={searching ? "Searching..." : "Search for location"}
+            >
+              {searching ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+              <span className="text-sm font-medium">
+                {searching ? "Searching..." : "Search"}
+              </span>
+            </button>
+          </div>
         </div>
 
         <div>
