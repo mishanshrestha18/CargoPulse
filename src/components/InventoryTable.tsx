@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, RefreshCw, AlertTriangle, Trash2, Pencil, X, Plus } from 'lucide-react';
+import { Package, RefreshCw, AlertTriangle, Trash2, Pencil, X, Plus, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Inventory, InventoryInsert } from '@/types/database';
 
@@ -115,11 +115,49 @@ export default function InventoryTable() {
     }
   };
 
+  // CSV Export Function
+  const downloadCSV = () => {
+    // Define headers
+    const headers = ['SKU', 'Item Name', 'Quantity', 'Location', 'Status'];
+    
+    // Convert data to CSV format
+    const csvRows = [
+      headers.join(','), // header row
+      ...inventory.map(item => {
+        // Handle potential commas in data by wrapping in quotes
+        return [
+          `"${item.sku}"`,
+          `"${item.item_name}"`,
+          `"${item.quantity}"`,
+          `"${item.location}"`,
+          `"${item.status}"`
+        ].join(',');
+      })
+    ];
+
+    // Create file and trigger download
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Inventory_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Inventory Overview</h2>
         <div className="flex items-center gap-2">
+          <button
+            onClick={downloadCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            CSV Export
+          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
