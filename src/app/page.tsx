@@ -1,5 +1,12 @@
+'use client';
+
+import dynamic from 'next/dynamic';
 import AddLocationForm from './components/AddLocationForm';
-import LocationList from '@/components/LocationList';
+
+// Dynamically import Map component with no SSR
+const Map = dynamic(() => import('@/components/Map'), {
+  ssr: false,
+});
 
 export default function Home() {
   return (
@@ -13,9 +20,9 @@ export default function Home() {
           <AddLocationForm />
         </div>
 
-        {/* Right Column: Location List */}
+        {/* Right Column: Live Route Map */}
         <div>
-          <LocationList />
+          <Map />
         </div>
 
       </div>
