@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, RefreshCw, AlertTriangle, Trash2, Pencil, X, Plus, Download } from 'lucide-react';
+import { Package, RefreshCw, AlertTriangle, Trash2, Pencil, X, Plus, Download, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Inventory, InventoryInsert } from '@/types/database';
 
@@ -13,6 +13,10 @@ export default function InventoryTable() {
   const [editForm, setEditForm] = useState({ item_name: '', quantity: 0, location: '', status: '' });
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ sku: '', item_name: '', quantity: 0, location: '', status: '' });
+
+  // Search and Filter State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('All');
 
   const fetchInventory = async () => {
     try {
@@ -39,6 +43,27 @@ export default function InventoryTable() {
   }, []);
 
   const isLowStock = (quantity: number) => quantity < 20;
+
+  // Filtered Inventory
+  const filteredInventory = inventory.filter(item => {
+    // Search by Item Name OR SKU
+    const matchesSearch = 
+      item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // Filter by Status
+    let matchesStatus = true;
+    if (filterStatus === 'In Stock') {
+      matchesStatus = item.quantity >= 20;
+    } else if (filterStatus === 'Low Stock') {
+      matchesStatus = item.quantity > 0 && item.quantity < 20;
+    } else if (filterStatus === 'Out of Stock') {
+      matchesStatus = item.quantity === 0;
+    }
+    // If "All", matchesStatus remains true
+    
+    return matchesSearch && matchesStatus;
+  });
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this inventory item?')) return;
@@ -117,13 +142,16 @@ export default function InventoryTable() {
 
   // CSV Export Function
   const downloadCSV = () => {
+    // Use filtered inventory for export
+    const dataToExport = filteredInventory;
+    
     // Define headers
     const headers = ['SKU', 'Item Name', 'Quantity', 'Location', 'Status'];
     
     // Convert data to CSV format
     const csvRows = [
       headers.join(','), // header row
-      ...inventory.map(item => {
+      ...dataToExport.map(item => {
         // Handle potential commas in data by wrapping in quotes
         return [
           `"${item.sku}"`,
@@ -176,6 +204,32 @@ export default function InventoryTable() {
         </div>
       </div>
 
+      {/* Search and Filter Bar */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search items..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+          />
+        </div>
+        <div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+          >
+            <option value="All">All Status</option>
+            <option value="In Stock">In Stock</option>
+            <option value="Low Stock">Low Stock</option>
+            <option value="Out of Stock">Out of Stock</option>
+          </select>
+        </div>
+      </div>
+
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-800 border border-red-200 rounded-md">
           {error}
@@ -187,10 +241,14 @@ export default function InventoryTable() {
           <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
           <span className="ml-2 text-gray-500">Loading inventory...</span>
         </div>
-      ) : inventory.length === 0 ? (
+      ) : filteredInventory.length === 0 ? (
         <div className="text-center py-12">
           <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No inventory items found. Add one to get started!</p>
+          <p className="text-gray-500">
+            {inventory.length === 0 
+              ? 'No inventory items found. Add one to get started!' 
+              : 'No items match your search criteria.'}
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -206,7 +264,7 @@ export default function InventoryTable() {
               </tr>
             </thead>
             <tbody>
-              {inventory.map((item) => (
+              {filteredInventory.map((item) => (
                 <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4">
                     <span className="text-gray-900 font-mono text-sm">{item.sku}</span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, RefreshCw, Trash2, Pencil, X, Plus, Download } from 'lucide-react';
+import { Truck, RefreshCw, Trash2, Pencil, X, Plus, Download, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Vehicle, VehicleInsert } from '@/types/database';
 
@@ -13,6 +13,10 @@ export default function FleetTable() {
   const [editForm, setEditForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
+  
+  // Search and Filter State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('All');
 
   const fetchVehicles = async () => {
     try {
@@ -37,6 +41,13 @@ export default function FleetTable() {
   useEffect(() => {
     fetchVehicles();
   }, []);
+
+  // Filtered Vehicles
+  const filteredVehicles = vehicles.filter(vehicle => {
+    const matchesSearch = vehicle.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'All' || vehicle.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
 
   const getStatusColor = (status: Vehicle['status']) => {
     switch (status) {
@@ -127,13 +138,16 @@ export default function FleetTable() {
 
   // CSV Export Function
   const downloadCSV = () => {
+    // Use filtered vehicles for export
+    const dataToExport = filteredVehicles;
+    
     // Define headers
     const headers = ['Name', 'Type', 'Status', 'Capacity'];
     
     // Convert data to CSV format
     const csvRows = [
       headers.join(','), // header row
-      ...vehicles.map(v => {
+      ...dataToExport.map(v => {
         // Handle potential commas in data by wrapping in quotes
         return [
           `"${v.name}"`,
@@ -185,6 +199,32 @@ export default function FleetTable() {
         </div>
       </div>
 
+      {/* Search and Filter Bar */}
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search vehicles..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+          />
+        </div>
+        <div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+          >
+            <option value="All">All Status</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Idle">Idle</option>
+            <option value="Maintenance">Maintenance</option>
+          </select>
+        </div>
+      </div>
+
       {error && (
         <div className="mb-4 p-3 bg-red-50 text-red-800 border border-red-200 rounded-md">
           {error}
@@ -196,10 +236,14 @@ export default function FleetTable() {
           <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
           <span className="ml-2 text-gray-500">Loading vehicles...</span>
         </div>
-      ) : vehicles.length === 0 ? (
+      ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12">
           <Truck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No vehicles found. Add one to get started!</p>
+          <p className="text-gray-500">
+            {vehicles.length === 0 
+              ? 'No vehicles found. Add one to get started!' 
+              : 'No vehicles match your search criteria.'}
+          </p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -214,7 +258,7 @@ export default function FleetTable() {
               </tr>
             </thead>
             <tbody>
-              {vehicles.map((vehicle) => (
+              {filteredVehicles.map((vehicle) => (
                 <tr key={vehicle.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
