@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, RefreshCw } from 'lucide-react';
+import { Truck, RefreshCw, Trash2, Pencil, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Vehicle } from '@/types/database';
 
@@ -9,6 +9,8 @@ export default function FleetTable() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
 
   const fetchVehicles = async () => {
     try {
@@ -44,6 +46,57 @@ export default function FleetTable() {
         return 'text-red-700 bg-red-50 border-red-200';
       default:
         return 'text-gray-700 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this vehicle?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('vehicles')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Refresh the list
+      await fetchVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete vehicle');
+    }
+  };
+
+  const handleEdit = (vehicle: Vehicle) => {
+    setEditingVehicle(vehicle);
+    setEditForm({
+      name: vehicle.name,
+      type: vehicle.type,
+      status: vehicle.status,
+      capacity: vehicle.capacity,
+    });
+  };
+
+  const handleUpdate = async () => {
+    if (!editingVehicle) return;
+
+    try {
+      const { error } = await supabase
+        .from('vehicles')
+        .update({
+          name: editForm.name,
+          type: editForm.type,
+          status: editForm.status,
+          capacity: editForm.capacity,
+        })
+        .eq('id', editingVehicle.id);
+
+      if (error) throw error;
+
+      setEditingVehicle(null);
+      await fetchVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update vehicle');
     }
   };
 
@@ -86,6 +139,7 @@ export default function FleetTable() {
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Type</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Capacity</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -104,10 +158,105 @@ export default function FleetTable() {
                     </span>
                   </td>
                   <td className="py-3 px-4 text-gray-700">{vehicle.capacity}</td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEdit(vehicle)}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Edit vehicle"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(vehicle.id)}
+                        className="text-red-600 hover:text-red-800 transition-colors"
+                        title="Delete vehicle"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingVehicle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Edit Vehicle</h3>
+              <button
+                onClick={() => setEditingVehicle(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <input
+                  type="text"
+                  value={editForm.type}
+                  onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Vehicle['status'] })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  <option value="In Transit">In Transit</option>
+                  <option value="Idle">Idle</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                <input
+                  type="number"
+                  value={editForm.capacity}
+                  onChange={(e) => setEditForm({ ...editForm, capacity: parseFloat(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleUpdate}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingVehicle(null)}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

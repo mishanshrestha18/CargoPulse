@@ -35,25 +35,45 @@ export default function Map() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchLocations = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('locations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setLocations(data || []);
+    } catch (err) {
+      console.error('Error fetching locations:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchLocations = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('locations')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setLocations(data || []);
-      } catch (err) {
-        console.error('Error fetching locations:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchLocations();
   }, []);
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this location?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('locations')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Refresh the map
+      await fetchLocations();
+    } catch (err) {
+      console.error('Error deleting location:', err);
+      alert('Failed to delete location');
+    }
+  };
 
   // Default center (you can adjust this)
   const defaultCenter: [number, number] = [20.5937, 78.9629]; // India center
@@ -108,9 +128,15 @@ export default function Map() {
                 <div className="text-sm">
                   <h3 className="font-bold text-gray-900">{location.name}</h3>
                   <p className="text-gray-600 capitalize">Type: {location.type}</p>
-                  <p className="text-gray-500 text-xs font-mono">
+                  <p className="text-gray-500 text-xs font-mono mb-2">
                     {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
                   </p>
+                  <button
+                    onClick={() => handleDelete(location.id)}
+                    className="text-red-600 hover:text-red-800 text-xs font-semibold transition-colors"
+                  >
+                    Delete
+                  </button>
                 </div>
               </Popup>
             </Marker>

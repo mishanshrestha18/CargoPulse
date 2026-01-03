@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Package, RefreshCw, AlertTriangle, Trash2, Pencil, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Inventory } from '@/types/database';
 
@@ -9,6 +9,8 @@ export default function InventoryTable() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<Inventory | null>(null);
+  const [editForm, setEditForm] = useState({ item_name: '', quantity: 0, location: '', status: '' });
 
   const fetchInventory = async () => {
     try {
@@ -35,6 +37,57 @@ export default function InventoryTable() {
   }, []);
 
   const isLowStock = (quantity: number) => quantity < 20;
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this inventory item?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Refresh the list
+      await fetchInventory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete inventory item');
+    }
+  };
+
+  const handleEdit = (item: Inventory) => {
+    setEditingItem(item);
+    setEditForm({
+      item_name: item.item_name,
+      quantity: item.quantity,
+      location: item.location,
+      status: item.status,
+    });
+  };
+
+  const handleUpdate = async () => {
+    if (!editingItem) return;
+
+    try {
+      const { error } = await supabase
+        .from('inventory')
+        .update({
+          item_name: editForm.item_name,
+          quantity: editForm.quantity,
+          location: editForm.location,
+          status: editForm.status,
+        })
+        .eq('id', editingItem.id);
+
+      if (error) throw error;
+
+      setEditingItem(null);
+      await fetchInventory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update inventory item');
+    }
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -76,6 +129,7 @@ export default function InventoryTable() {
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Quantity</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Location</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -102,10 +156,102 @@ export default function InventoryTable() {
                   </td>
                   <td className="py-3 px-4 text-gray-700">{item.location}</td>
                   <td className="py-3 px-4 text-gray-700">{item.status}</td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Edit item"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="text-red-600 hover:text-red-800 transition-colors"
+                        title="Delete item"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Edit Inventory Item</h3>
+              <button
+                onClick={() => setEditingItem(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                <input
+                  type="text"
+                  value={editForm.item_name}
+                  onChange={(e) => setEditForm({ ...editForm, item_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  value={editForm.quantity}
+                  onChange={(e) => setEditForm({ ...editForm, quantity: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <input
+                  type="text"
+                  value={editForm.status}
+                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleUpdate}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingItem(null)}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

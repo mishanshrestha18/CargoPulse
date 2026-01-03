@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Truck, Warehouse } from 'lucide-react';
+import { Truck, Warehouse, LayoutDashboard } from 'lucide-react';
 
 const navigation = [
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Fleet', href: '/fleet', icon: Truck },
   { name: 'Warehouse', href: '/warehouse', icon: Warehouse },
 ];
@@ -14,9 +15,9 @@ export default function Sidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col border-r border-gray-200 bg-white">
-      <div className="flex h-16 items-center border-b border-gray-200 px-6">
+      <Link href="/" className="flex h-16 items-center border-b border-gray-200 px-6 hover:bg-gray-50 transition-colors">
         <h1 className="text-xl font-bold text-gray-900">CargoPulse</h1>
-      </div>
+      </Link>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
           const isActive = pathname === item.href;
