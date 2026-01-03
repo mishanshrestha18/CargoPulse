@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, RefreshCw, AlertTriangle, Trash2, Pencil, X } from 'lucide-react';
+import { Package, RefreshCw, AlertTriangle, Trash2, Pencil, X, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Inventory } from '@/types/database';
+import type { Inventory, InventoryInsert } from '@/types/database';
 
 export default function InventoryTable() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
@@ -11,6 +11,8 @@ export default function InventoryTable() {
   const [error, setError] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<Inventory | null>(null);
   const [editForm, setEditForm] = useState({ item_name: '', quantity: 0, location: '', status: '' });
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ sku: '', item_name: '', quantity: 0, location: '', status: '' });
 
   const fetchInventory = async () => {
     try {
@@ -89,18 +91,51 @@ export default function InventoryTable() {
     }
   };
 
+  const handleAdd = async () => {
+    try {
+      const newItem: InventoryInsert = {
+        sku: addForm.sku,
+        item_name: addForm.item_name,
+        quantity: addForm.quantity,
+        location: addForm.location,
+        status: addForm.status,
+      };
+
+      const { error } = await supabase
+        .from('inventory')
+        .insert([newItem]);
+
+      if (error) throw error;
+
+      setShowAddModal(false);
+      setAddForm({ sku: '', item_name: '', quantity: 0, location: '', status: '' });
+      await fetchInventory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add inventory item');
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Inventory Overview</h2>
-        <button
-          onClick={fetchInventory}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Item
+          </button>
+          <button
+            onClick={fetchInventory}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -178,6 +213,95 @@ export default function InventoryTable() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Add Item Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Add New Inventory Item</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                <input
+                  type="text"
+                  value={addForm.sku}
+                  onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., SKU-001"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                <input
+                  type="text"
+                  value={addForm.item_name}
+                  onChange={(e) => setAddForm({ ...addForm, item_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., Laptop"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  value={addForm.quantity}
+                  onChange={(e) => setAddForm({ ...addForm, quantity: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., 100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  value={addForm.location}
+                  onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., Warehouse A"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <input
+                  type="text"
+                  value={addForm.status}
+                  onChange={(e) => setAddForm({ ...addForm, status: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., Available"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleAdd}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Add Item
+                </button>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

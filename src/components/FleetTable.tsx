@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, RefreshCw, Trash2, Pencil, X } from 'lucide-react';
+import { Truck, RefreshCw, Trash2, Pencil, X, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Vehicle } from '@/types/database';
+import type { Vehicle, VehicleInsert } from '@/types/database';
 
 export default function FleetTable() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -11,6 +11,8 @@ export default function FleetTable() {
   const [error, setError] = useState<string | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editForm, setEditForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
 
   const fetchVehicles = async () => {
     try {
@@ -100,18 +102,50 @@ export default function FleetTable() {
     }
   };
 
+  const handleAdd = async () => {
+    try {
+      const newVehicle: VehicleInsert = {
+        name: addForm.name,
+        type: addForm.type,
+        status: addForm.status,
+        capacity: addForm.capacity,
+      };
+
+      const { error } = await supabase
+        .from('vehicles')
+        .insert([newVehicle]);
+
+      if (error) throw error;
+
+      setShowAddModal(false);
+      setAddForm({ name: '', type: '', status: 'Idle', capacity: 0 });
+      await fetchVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add vehicle');
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-800">Fleet Overview</h2>
-        <button
-          onClick={fetchVehicles}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Vehicle
+          </button>
+          <button
+            onClick={fetchVehicles}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -180,6 +214,86 @@ export default function FleetTable() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Add Vehicle Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Add New Vehicle</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={addForm.name}
+                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., Truck-01"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <input
+                  type="text"
+                  value={addForm.type}
+                  onChange={(e) => setAddForm({ ...addForm, type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., Heavy Truck"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={addForm.status}
+                  onChange={(e) => setAddForm({ ...addForm, status: e.target.value as Vehicle['status'] })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                >
+                  <option value="Idle">Idle</option>
+                  <option value="In Transit">In Transit</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                <input
+                  type="number"
+                  value={addForm.capacity}
+                  onChange={(e) => setAddForm({ ...addForm, capacity: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  placeholder="e.g., 5000"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleAdd}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Add Vehicle
+                </button>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
