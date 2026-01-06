@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import AddLocationForm from './components/AddLocationForm';
 import DashboardStats from '@/components/DashboardStats';
 import DashboardCharts from '@/components/DashboardCharts';
+import ShipmentCreator from '@/components/ShipmentCreator';
 
 // Dynamically import Map component with no SSR
 const Map = dynamic(() => import('@/components/Map'), {
@@ -13,7 +14,7 @@ const Map = dynamic(() => import('@/components/Map'), {
 export default function Home() {
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">Logistics Dashboard</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-100">Logistics Dashboard</h1>
 
       {/* Dashboard Statistics */}
       <DashboardStats />
@@ -21,11 +22,16 @@ export default function Home() {
       {/* Dashboard Charts */}
       <DashboardCharts />
 
+      {/* Shipment Creator - Smart Order Dispatch */}
+      <div className="mb-8">
+        <ShipmentCreator />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
         {/* Left Column: Input Form */}
         <div>
-          <h2 className="text-xl font-semibold mb-4 text-gray-800">Add New Node</h2>
+          <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Add New Node</h2>
           <AddLocationForm />
         </div>
 

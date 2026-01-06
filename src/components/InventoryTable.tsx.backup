@@ -392,7 +392,6 @@ export default function InventoryTable() {
         </div>
       )}
 
-
       {/* Add Item Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -482,94 +481,99 @@ export default function InventoryTable() {
                   />
                 </div>
 
+                {/* Tiered Discount Section */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Discount Tiers (Max 20%)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Discount Tiers (Max 20%)</label>
 
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Tier 1: Qty ≥</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={addForm.discount_tier_1_qty}
-                        onChange={(e) => setAddForm({ ...addForm, discount_tier_1_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 10"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Discount %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={addForm.discount_tier_1_percent}
-                        onChange={(e) => setAddForm({ ...addForm, discount_tier_1_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 5"
-                      />
-                    </div>
+                {/* Tier 1 */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Tier 1: Qty ≥</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={addForm.discount_tier_1_qty}
+                      onChange={(e) => setAddForm({ ...addForm, discount_tier_1_qty: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 10"
+                    />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Tier 2: Qty ≥</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={addForm.discount_tier_2_qty}
-                        onChange={(e) => setAddForm({ ...addForm, discount_tier_2_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Discount %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={addForm.discount_tier_2_percent}
-                        onChange={(e) => setAddForm({ ...addForm, discount_tier_2_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 10"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={addForm.discount_tier_1_percent}
+                      onChange={(e) => setAddForm({ ...addForm, discount_tier_1_percent: Math.min(20, parseInt(e.target.value) || 0) })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 5"
+                    />
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Tier 3: Qty ≥</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={addForm.discount_tier_3_qty}
-                        onChange={(e) => setAddForm({ ...addForm, discount_tier_3_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 100"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Discount %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={addForm.discount_tier_3_percent}
-                        onChange={(e) => setAddForm({ ...addForm, discount_tier_3_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 15"
-                      />
-                    </div>
+                {/* Tier 2 */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Tier 2: Qty ≥</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={addForm.discount_tier_2_qty}
+                      onChange={(e) => setAddForm({ ...addForm, discount_tier_2_qty: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 50"
+                    />
                   </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={addForm.discount_tier_2_percent}
+                      onChange={(e) => setAddForm({ ...addForm, discount_tier_2_percent: Math.min(20, parseInt(e.target.value) || 0) })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 10"
+                    />
+                  </div>
+                </div>
 
-                  <p className="text-xs text-gray-500 mt-2">
-                    Discounts apply automatically based on order quantity. Max discount capped at 20%.
-                  </p>
+                {/* Tier 3 */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Tier 3: Qty ≥</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={addForm.discount_tier_3_qty}
+                      onChange={(e) => setAddForm({ ...addForm, discount_tier_3_qty: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={addForm.discount_tier_3_percent}
+                      onChange={(e) => setAddForm({ ...addForm, discount_tier_3_percent: Math.min(20, parseInt(e.target.value) || 0) })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 15"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  Discounts apply automatically based on order quantity. Max discount capped at 20%.
+                </p>
                 </div>
               </div>
             </div>
 
+            {/* Action Buttons - Full Width Below Columns */}
             <div className="flex gap-3 pt-6 border-t border-gray-200 mt-6">
               <button
                 onClick={handleAdd}
@@ -606,163 +610,160 @@ export default function InventoryTable() {
               {/* Left Column - Basic Info */}
               <div className="space-y-4">
                 <h4 className="font-semibold text-gray-900 text-sm uppercase tracking-wide">Basic Information</h4>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
-                  <input
-                    type="text"
-                    value={editForm.item_name}
-                    onChange={(e) => setEditForm({ ...editForm, item_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                  <input
-                    type="number"
-                    value={editForm.quantity}
-                    onChange={(e) => setEditForm({ ...editForm, quantity: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                  <input
-                    type="text"
-                    value={editForm.location}
-                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  />
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                  <p className="text-xs text-blue-800">
-                    <strong>Status Auto-calculated:</strong><br />
-                    • Qty = 0 → Out of Stock<br />
-                    • Qty &lt; 10 → Low Stock<br />
-                    • Qty ≥ 10 → In Stock
-                  </p>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                <input
+                  type="text"
+                  value={editForm.item_name}
+                  onChange={(e) => setEditForm({ ...editForm, item_name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
               </div>
 
-              {/* Right Column - Pricing & Discounts */}
-              <div className="space-y-4">
-                <h4 className="font-semibold text-gray-900 text-sm uppercase tracking-wide">Pricing & Discounts</h4>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price per Unit ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editForm.price_per_unit}
-                    onChange={(e) => setEditForm({ ...editForm, price_per_unit: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Discount Tiers (Max 20%)</label>
-
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Tier 1: Qty ≥</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editForm.discount_tier_1_qty}
-                        onChange={(e) => setEditForm({ ...editForm, discount_tier_1_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 10"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Discount %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={editForm.discount_tier_1_percent}
-                        onChange={(e) => setEditForm({ ...editForm, discount_tier_1_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 5"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Tier 2: Qty ≥</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editForm.discount_tier_2_qty}
-                        onChange={(e) => setEditForm({ ...editForm, discount_tier_2_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Discount %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={editForm.discount_tier_2_percent}
-                        onChange={(e) => setEditForm({ ...editForm, discount_tier_2_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 10"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Tier 3: Qty ≥</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={editForm.discount_tier_3_qty}
-                        onChange={(e) => setEditForm({ ...editForm, discount_tier_3_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 100"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">Discount %</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="20"
-                        value={editForm.discount_tier_3_percent}
-                        onChange={(e) => setEditForm({ ...editForm, discount_tier_3_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                        placeholder="e.g., 15"
-                      />
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-gray-500 mt-2">
-                    Discounts apply automatically based on order quantity. Max discount capped at 20%.
-                  </p>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  value={editForm.quantity}
+                  onChange={(e) => setEditForm({ ...editForm, quantity: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
               </div>
-            </div>
 
-            <div className="flex gap-3 pt-6 border-t border-gray-200 mt-6">
-              <button
-                onClick={handleUpdate}
-                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setEditingItem(null)}
-                className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
-              >
-                Cancel
-              </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  value={editForm.location}
+                  onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Price per Unit ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editForm.price_per_unit}
+                  onChange={(e) => setEditForm({ ...editForm, price_per_unit: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+
+              {/* Tiered Discount Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Discount Tiers (Max 20%)</label>
+
+                {/* Tier 1 */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Tier 1: Qty ≥</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editForm.discount_tier_1_qty}
+                      onChange={(e) => setEditForm({ ...editForm, discount_tier_1_qty: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 10"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={editForm.discount_tier_1_percent}
+                      onChange={(e) => setEditForm({ ...editForm, discount_tier_1_percent: Math.min(20, parseInt(e.target.value) || 0) })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 5"
+                    />
+                  </div>
+                </div>
+
+                {/* Tier 2 */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Tier 2: Qty ≥</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editForm.discount_tier_2_qty}
+                      onChange={(e) => setEditForm({ ...editForm, discount_tier_2_qty: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={editForm.discount_tier_2_percent}
+                      onChange={(e) => setEditForm({ ...editForm, discount_tier_2_percent: Math.min(20, parseInt(e.target.value) || 0) })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 10"
+                    />
+                  </div>
+                </div>
+
+                {/* Tier 3 */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Tier 3: Qty ≥</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editForm.discount_tier_3_qty}
+                      onChange={(e) => setEditForm({ ...editForm, discount_tier_3_qty: parseInt(e.target.value) || 0 })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Discount %</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={editForm.discount_tier_3_percent}
+                      onChange={(e) => setEditForm({ ...editForm, discount_tier_3_percent: Math.min(20, parseInt(e.target.value) || 0) })}
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                      placeholder="e.g., 15"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  Discounts apply automatically based on order quantity. Max discount capped at 20%.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <p className="text-xs text-blue-800">
+                  <strong>Status will be auto-calculated:</strong><br />
+                  • Qty = 0 → Out of Stock (Red)<br />
+                  • Qty &lt; 10 → Low Stock (Yellow)<br />
+                  • Qty ≥ 10 → In Stock (Green)
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleUpdate}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingItem(null)}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

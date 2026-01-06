@@ -28,6 +28,15 @@ export interface Inventory {
   quantity: number;
   location: string;
   status: string;
+  price_per_unit: number;
+  max_discount: number;
+  // Tiered discount structure: [qty_threshold, discount_percent]
+  discount_tier_1_qty?: number;  // e.g., 10 items
+  discount_tier_1_percent?: number;  // e.g., 5%
+  discount_tier_2_qty?: number;  // e.g., 50 items
+  discount_tier_2_percent?: number;  // e.g., 10%
+  discount_tier_3_qty?: number;  // e.g., 100 items
+  discount_tier_3_percent?: number;  // e.g., 15%
 }
 
 export type InventoryInsert = Omit<Inventory, 'id' | 'created_at'>;
