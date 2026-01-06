@@ -40,3 +40,31 @@ export interface Inventory {
 }
 
 export type InventoryInsert = Omit<Inventory, 'id' | 'created_at'>;
+
+export interface Driver {
+  id: string;
+  created_at: string;
+  name: string;
+  status: 'Idle' | 'Busy';
+  phone?: string;
+  license_number?: string;
+}
+
+export type DriverInsert = Omit<Driver, 'id' | 'created_at'>;
+
+export interface Shipment {
+  id: string;
+  created_at: string;
+  driver_id: string;
+  vehicle_id: string;
+  origin: string;
+  destination: string;
+  inventory_item_id: string;
+  quantity: number;
+  arrival_time: string;
+  status: 'In Transit' | 'Delivered';
+  urgency: 'standard' | 'express';
+  total_cost: number;
+}
+
+export type ShipmentInsert = Omit<Shipment, 'id' | 'created_at'>;

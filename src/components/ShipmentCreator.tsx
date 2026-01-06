@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import { Truck, MapPin, Package, DollarSign, AlertCircle, Send } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Inventory, Location, Vehicle } from '@/types/database';
+import type { Inventory, Location, Vehicle, Driver, ShipmentInsert } from '@/types/database';
 
 interface ShipmentForm {
   origin: string;
   destination: string;
   vehicleId: string;
+  driverId: string;
   inventoryItemId: string;
   quantity: number;
   urgency: 'standard' | 'express';
@@ -19,6 +20,7 @@ interface PriceBreakdown {
   discountPercent: number;
   discountedProductCost: number;
   distanceKm: number;
+  durationSeconds: number;
   shippingCost: number;
   totalCost: number;
 }
@@ -26,6 +28,7 @@ interface PriceBreakdown {
 export default function ShipmentCreator() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
@@ -36,6 +39,7 @@ export default function ShipmentCreator() {
     origin: '',
     destination: '',
     vehicleId: '',
+    driverId: '',
     inventoryItemId: '',
     quantity: 0,
     urgency: 'standard',
@@ -52,18 +56,21 @@ export default function ShipmentCreator() {
     try {
       setLoading(true);
 
-      const [locationsRes, vehiclesRes, inventoryRes] = await Promise.all([
+      const [locationsRes, vehiclesRes, driversRes, inventoryRes] = await Promise.all([
         supabase.from('locations').select('*').order('name'),
         supabase.from('vehicles').select('*').eq('status', 'Idle').order('name'),
+        supabase.from('drivers').select('*').eq('status', 'Idle').order('name'),
         supabase.from('inventory').select('*').gt('quantity', 0).order('item_name'),
       ]);
 
       if (locationsRes.error) throw locationsRes.error;
       if (vehiclesRes.error) throw vehiclesRes.error;
+      if (driversRes.error) throw driversRes.error;
       if (inventoryRes.error) throw inventoryRes.error;
 
       setLocations(locationsRes.data || []);
       setVehicles(vehiclesRes.data || []);
+      setDrivers(driversRes.data || []);
       setInventory(inventoryRes.data || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
@@ -93,8 +100,8 @@ export default function ShipmentCreator() {
     return Math.min(discount, item.max_discount || 20);
   };
 
-  // Calculate distance using OSRM
-  const calculateDistance = async (originLoc: Location, destLoc: Location): Promise<number> => {
+  // Calculate distance and duration using OSRM
+  const calculateRoute = async (originLoc: Location, destLoc: Location): Promise<{ distanceKm: number; durationSeconds: number }> => {
     const url = `https://router.project-osrm.org/route/v1/driving/${originLoc.longitude},${originLoc.latitude};${destLoc.longitude},${destLoc.latitude}?overview=false`;
 
     const response = await fetch(url);
@@ -104,8 +111,11 @@ export default function ShipmentCreator() {
       throw new Error('Could not calculate route distance');
     }
 
-    // Return distance in kilometers
-    return data.routes[0].distance / 1000;
+    // Return distance in kilometers and duration in seconds
+    return {
+      distanceKm: data.routes[0].distance / 1000,
+      durationSeconds: data.routes[0].duration,
+    };
   };
 
   // Recalculate pricing whenever form changes
@@ -128,8 +138,8 @@ export default function ShipmentCreator() {
         setCalculating(true);
         setError(null);
 
-        // Calculate distance
-        const distanceKm = await calculateDistance(originLoc, destLoc);
+        // Calculate distance and duration
+        const { distanceKm, durationSeconds } = await calculateRoute(originLoc, destLoc);
 
         // Calculate product cost
         const productCost = selectedItem.price_per_unit * form.quantity;
@@ -151,6 +161,7 @@ export default function ShipmentCreator() {
           discountPercent,
           discountedProductCost,
           distanceKm,
+          durationSeconds,
           shippingCost,
           totalCost,
         });
@@ -183,15 +194,51 @@ export default function ShipmentCreator() {
       return;
     }
 
+    // Validate driver is selected
+    if (!form.driverId) {
+      setError('Please select a driver for the shipment');
+      return;
+    }
+
+    // Validate vehicle is selected
+    if (!form.vehicleId) {
+      setError('Please select a vehicle for the shipment');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+
+      // Calculate arrival time = Current Time + Route Duration
+      const currentTime = new Date();
+      const arrivalTime = new Date(currentTime.getTime() + priceBreakdown.durationSeconds * 1000);
+
+      // Create shipment record
+      const shipmentData: ShipmentInsert = {
+        driver_id: form.driverId,
+        vehicle_id: form.vehicleId,
+        origin: form.origin,
+        destination: form.destination,
+        inventory_item_id: form.inventoryItemId,
+        quantity: form.quantity,
+        arrival_time: arrivalTime.toISOString(),
+        status: 'In Transit',
+        urgency: form.urgency,
+        total_cost: priceBreakdown.totalCost,
+      };
+
+      const { error: shipmentError } = await supabase
+        .from('shipments')
+        .insert(shipmentData);
+
+      if (shipmentError) throw shipmentError;
 
       // Update inventory quantity
       const newQuantity = selectedItem.quantity - form.quantity;
       const newStatus = newQuantity === 0 ? 'Out of Stock' : newQuantity < 10 ? 'Low Stock' : 'In Stock';
 
-      const { error: updateError } = await supabase
+      const { error: inventoryError } = await supabase
         .from('inventory')
         .update({
           quantity: newQuantity,
@@ -199,23 +246,36 @@ export default function ShipmentCreator() {
         })
         .eq('id', selectedItem.id);
 
-      if (updateError) throw updateError;
+      if (inventoryError) throw inventoryError;
 
       // Update vehicle status to In Transit
-      if (form.vehicleId) {
-        await supabase
-          .from('vehicles')
-          .update({ status: 'In Transit' })
-          .eq('id', form.vehicleId);
-      }
+      const { error: vehicleError } = await supabase
+        .from('vehicles')
+        .update({ status: 'In Transit' })
+        .eq('id', form.vehicleId);
 
-      setSuccess(`Shipment dispatched successfully! ${form.quantity} units of ${selectedItem.item_name} sent. Total cost: $${priceBreakdown.totalCost.toFixed(2)}`);
+      if (vehicleError) throw vehicleError;
+
+      // Update driver status to Busy
+      const { error: driverError } = await supabase
+        .from('drivers')
+        .update({ status: 'Busy' })
+        .eq('id', form.driverId);
+
+      if (driverError) throw driverError;
+
+      // Get driver name for success message
+      const selectedDriver = drivers.find(d => String(d.id) === String(form.driverId));
+      const driverName = selectedDriver ? selectedDriver.name : 'Driver';
+
+      setSuccess(`Shipment dispatched successfully! ${form.quantity} units of ${selectedItem.item_name} sent with ${driverName}. ETA: ${arrivalTime.toLocaleString()}. Total cost: $${priceBreakdown.totalCost.toFixed(2)}`);
 
       // Reset form
       setForm({
         origin: '',
         destination: '',
         vehicleId: '',
+        driverId: '',
         inventoryItemId: '',
         quantity: 0,
         urgency: 'standard',
@@ -339,6 +399,29 @@ export default function ShipmentCreator() {
             </select>
             {vehicles.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">No idle vehicles available</p>
+            )}
+          </div>
+
+          {/* Driver Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              <Truck className="w-4 h-4 inline mr-1" />
+              Select Driver
+            </label>
+            <select
+              value={form.driverId}
+              onChange={(e) => setForm({ ...form, driverId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            >
+              <option value="">Select driver...</option>
+              {drivers.map(driver => (
+                <option key={driver.id} value={driver.id}>
+                  {driver.name} {driver.phone ? `- ${driver.phone}` : ''}
+                </option>
+              ))}
+            </select>
+            {drivers.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">No idle drivers available</p>
             )}
           </div>
 
@@ -517,16 +600,18 @@ export default function ShipmentCreator() {
           {/* Dispatch Button */}
           <button
             onClick={handleDispatch}
-            disabled={!priceBreakdown || isQuantityExceeded || isSameLocation || loading || !form.vehicleId}
+            disabled={!priceBreakdown || isQuantityExceeded || isSameLocation || loading || !form.vehicleId || !form.driverId}
             className="w-full bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold transition-colors"
           >
             <Send className="w-5 h-5" />
             Dispatch Shipment
           </button>
 
-          {!form.vehicleId && form.inventoryItemId && (
+          {(!form.vehicleId || !form.driverId) && form.inventoryItemId && (
             <p className="text-xs text-amber-600 text-center">
-              Please select a vehicle to dispatch
+              {!form.vehicleId && !form.driverId && 'Please select a vehicle and driver to dispatch'}
+              {!form.vehicleId && form.driverId && 'Please select a vehicle to dispatch'}
+              {form.vehicleId && !form.driverId && 'Please select a driver to dispatch'}
             </p>
           )}
         </div>
