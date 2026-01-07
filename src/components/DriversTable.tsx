@@ -64,7 +64,13 @@ export default function DriversTable() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, status: Driver['status']) => {
+    // Prevent deletion of drivers that are Busy
+    if (status === 'Busy') {
+      setError('Cannot delete driver while Busy. Cancel the active shipment first.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this driver?')) return;
 
     try {
@@ -277,9 +283,9 @@ export default function DriversTable() {
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(driver.id)}
+                          onClick={() => handleDelete(driver.id, driver.status)}
                           className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                          title="Delete driver"
+                          title={driver.status === 'Busy' ? 'Cannot delete driver while Busy' : 'Delete driver'}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -417,11 +423,17 @@ export default function DriversTable() {
                 <select
                   value={editForm.status}
                   onChange={(e) => setEditForm({ ...editForm, status: e.target.value as 'Idle' | 'Busy' })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                  disabled={editingDriver?.status === 'Busy'}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100 disabled:bg-gray-100 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
                 >
                   <option value="Idle">Idle</option>
                   <option value="Busy">Busy</option>
                 </select>
+                {editingDriver?.status === 'Busy' && (
+                  <p className="mt-1 text-xs text-orange-600 dark:text-orange-400">
+                    Currently on active shipment. Cancel shipment to reset.
+                  </p>
+                )}
               </div>
 
               <div>

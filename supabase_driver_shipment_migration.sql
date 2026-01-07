@@ -25,7 +25,7 @@ CREATE TABLE shipments (
   inventory_item_id BIGINT NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   arrival_time TIMESTAMP WITH TIME ZONE NOT NULL,
-  status TEXT NOT NULL DEFAULT 'In Transit' CHECK (status IN ('In Transit', 'Delivered')),
+  status TEXT NOT NULL DEFAULT 'In Transit' CHECK (status IN ('In Transit', 'Delivered', 'Cancelled')),
   urgency TEXT NOT NULL DEFAULT 'standard' CHECK (urgency IN ('standard', 'express')),
   total_cost DECIMAL(10, 2) NOT NULL
 );

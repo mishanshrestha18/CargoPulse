@@ -62,7 +62,13 @@ export default function FleetTable() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, status: Vehicle['status']) => {
+    // Prevent deletion of vehicles that are In Transit
+    if (status === 'In Transit') {
+      setError('Cannot delete vehicle while In Transit. Cancel the active shipment first.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this vehicle?')) return;
 
     try {
@@ -283,9 +289,9 @@ export default function FleetTable() {
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(vehicle.id)}
+                        onClick={() => handleDelete(vehicle.id, vehicle.status)}
                         className="text-red-600 hover:text-red-800 transition-colors"
-                        title="Delete vehicle"
+                        title={vehicle.status === 'In Transit' ? 'Cannot delete vehicle while In Transit' : 'Delete vehicle'}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -418,12 +424,18 @@ export default function FleetTable() {
                 <select
                   value={editForm.status}
                   onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Vehicle['status'] })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  disabled={editingVehicle?.status === 'In Transit'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   <option value="In Transit">In Transit</option>
                   <option value="Idle">Idle</option>
                   <option value="Maintenance">Maintenance</option>
                 </select>
+                {editingVehicle?.status === 'In Transit' && (
+                  <p className="mt-1 text-xs text-orange-600">
+                    Currently on active shipment. Cancel shipment to reset.
+                  </p>
+                )}
               </div>
 
               <div>

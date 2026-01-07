@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, Package, MapPin, XCircle, Users, Clock, TrendingUp } from 'lucide-react';
+import { Truck, Package, MapPin, XCircle, Users, Clock, TrendingUp, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface ActiveShipment {
@@ -36,6 +36,7 @@ export default function ActiveShipmentsList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [swappingShipmentId, setSwappingShipmentId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -205,6 +206,46 @@ export default function ActiveShipmentsList() {
     }
   };
 
+  const handleFinishShipment = async (shipment: ActiveShipment) => {
+    try {
+      // Update shipment status to Delivered
+      const { error: shipmentError } = await supabase
+        .from('shipments')
+        .update({ status: 'Delivered' })
+        .eq('id', shipment.id);
+
+      if (shipmentError) throw shipmentError;
+
+      // Set driver back to Idle
+      const { error: driverError } = await supabase
+        .from('drivers')
+        .update({ status: 'Idle' })
+        .eq('id', shipment.driver_id);
+
+      if (driverError) throw driverError;
+
+      // Set vehicle back to Idle
+      const { error: vehicleError } = await supabase
+        .from('vehicles')
+        .update({ status: 'Idle' })
+        .eq('id', shipment.vehicle_id);
+
+      if (vehicleError) throw vehicleError;
+
+      // Show success notification
+      setSuccessMessage(
+        `🎉 Shipment completed! ${shipment.vehicles?.name} delivered ${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name}`
+      );
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+      await fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to finish shipment');
+    }
+  };
+
   if (loading && shipments.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
@@ -231,6 +272,15 @@ export default function ActiveShipmentsList() {
       {error && (
         <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
           <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+            <p className="text-green-800 dark:text-green-200 text-sm font-medium">{successMessage}</p>
+          </div>
         </div>
       )}
 
@@ -322,6 +372,14 @@ export default function ActiveShipmentsList() {
                 <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
                   {!isSwapping ? (
                     <>
+                      <button
+                        onClick={() => handleFinishShipment(shipment)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 text-sm transition-colors"
+                        title="Mark shipment as delivered"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Finish
+                      </button>
                       <button
                         onClick={() => setSwappingShipmentId(shipment.id)}
                         disabled={idleDrivers.length === 0}
