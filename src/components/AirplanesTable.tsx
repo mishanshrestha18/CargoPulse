@@ -1,19 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, RefreshCw, Trash2, Pencil, X, Plus, Download, Search } from 'lucide-react';
+import { Plane, RefreshCw, Trash2, Pencil, X, Plus, Download, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Vehicle, VehicleInsert } from '@/types/database';
 
-export default function FleetTable() {
+export default function AirplanesTable() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
+  const [editForm, setEditForm] = useState({ name: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
-  
+  const [addForm, setAddForm] = useState({ name: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
+
   // Search and Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -26,13 +26,14 @@ export default function FleetTable() {
       const { data, error: fetchError } = await supabase
         .from('vehicles')
         .select('*')
+        .eq('type', 'plane')
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
 
       setVehicles(data || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch vehicles');
+      setError(err instanceof Error ? err.message : 'Failed to fetch airplanes');
     } finally {
       setLoading(false);
     }
@@ -69,11 +70,11 @@ export default function FleetTable() {
   const handleDelete = async (id: string, status: Vehicle['status']) => {
     // Prevent deletion of vehicles that are In Transit
     if (status === 'In Transit') {
-      setError('Cannot delete vehicle while In Transit. Cancel the active shipment first.');
+      setError('Cannot delete airplane while In Transit. Cancel the active shipment first.');
       return;
     }
 
-    if (!confirm('Are you sure you want to delete this vehicle?')) return;
+    if (!confirm('Are you sure you want to delete this airplane?')) return;
 
     try {
       const { error } = await supabase
@@ -83,20 +84,18 @@ export default function FleetTable() {
 
       if (error) throw error;
 
-      // Refresh the list
       await fetchVehicles();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete vehicle');
+      setError(err instanceof Error ? err.message : 'Failed to delete airplane');
     }
   };
 
   const handleEdit = (vehicle: Vehicle) => {
     setEditingVehicle(vehicle);
     setEditForm({
-      name: vehicle.name,
-      type: vehicle.type,
-      status: vehicle.status,
-      capacity: vehicle.capacity,
+      name: vehicle.name || '',
+      status: vehicle.status || 'Idle',
+      capacity: vehicle.capacity || 0,
     });
   };
 
@@ -108,7 +107,6 @@ export default function FleetTable() {
         .from('vehicles')
         .update({
           name: editForm.name,
-          type: editForm.type,
           status: editForm.status,
           capacity: editForm.capacity,
         })
@@ -119,7 +117,7 @@ export default function FleetTable() {
       setEditingVehicle(null);
       await fetchVehicles();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update vehicle');
+      setError(err instanceof Error ? err.message : 'Failed to update airplane');
     }
   };
 
@@ -127,7 +125,7 @@ export default function FleetTable() {
     try {
       const newVehicle: VehicleInsert = {
         name: addForm.name,
-        type: addForm.type,
+        type: 'plane',
         status: addForm.status,
         capacity: addForm.capacity,
       };
@@ -139,42 +137,35 @@ export default function FleetTable() {
       if (error) throw error;
 
       setShowAddModal(false);
-      setAddForm({ name: '', type: '', status: 'Idle', capacity: 0 });
+      setAddForm({ name: '', status: 'Idle', capacity: 0 });
       await fetchVehicles();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add vehicle');
+      setError(err instanceof Error ? err.message : 'Failed to add airplane');
     }
   };
 
   // CSV Export Function
   const downloadCSV = () => {
-    // Use filtered vehicles for export
     const dataToExport = filteredVehicles;
-    
-    // Define headers
     const headers = ['Name', 'Type', 'Status', 'Capacity'];
-    
-    // Convert data to CSV format
     const csvRows = [
-      headers.join(','), // header row
-      ...dataToExport.map(v => {
-        // Handle potential commas in data by wrapping in quotes
+      headers.join(','),
+      ...dataToExport.map(vehicle => {
         return [
-          `"${v.name}"`,
-          `"${v.type}"`,
-          `"${v.status}"`,
-          `"${v.capacity}"`
+          `"${vehicle.name}"`,
+          `"plane"`,
+          `"${vehicle.status}"`,
+          `"${vehicle.capacity}"`
         ].join(',');
       })
     ];
 
-    // Create file and trigger download
     const csvString = csvRows.join('\n');
     const blob = new Blob([csvString], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Fleet_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `Airplanes_Report_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -182,7 +173,7 @@ export default function FleetTable() {
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Fleet Overview</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Airplane Fleet Overview</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={downloadCSV}
@@ -196,7 +187,7 @@ export default function FleetTable() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Add Vehicle
+            Add Airplane
           </button>
           <button
             onClick={fetchVehicles}
@@ -215,7 +206,7 @@ export default function FleetTable() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search vehicles..."
+            placeholder="Search airplanes..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
@@ -244,15 +235,15 @@ export default function FleetTable() {
       {loading && vehicles.length === 0 ? (
         <div className="flex items-center justify-center py-12">
           <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-          <span className="ml-2 text-gray-500">Loading vehicles...</span>
+          <span className="ml-2 text-gray-500">Loading airplanes...</span>
         </div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12">
-          <Truck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <Plane className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500">
-            {vehicles.length === 0 
-              ? 'No vehicles found. Add one to get started!' 
-              : 'No vehicles match your search criteria.'}
+            {vehicles.length === 0
+              ? 'No airplanes found. Add one to get started!'
+              : 'No airplanes match your search criteria.'}
           </p>
         </div>
       ) : (
@@ -263,7 +254,7 @@ export default function FleetTable() {
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Type</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Capacity</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Capacity (kg)</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
               </tr>
             </thead>
@@ -272,30 +263,30 @@ export default function FleetTable() {
                 <tr key={vehicle.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-gray-600" />
+                      <Plane className="w-4 h-4 text-blue-600" />
                       <span className="text-gray-900 font-medium">{vehicle.name}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-gray-700">{vehicle.type}</td>
+                  <td className="py-3 px-4 text-gray-700 capitalize">Airplane</td>
                   <td className="py-3 px-4">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(vehicle.status)}`}>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(vehicle.status)}`}>
                       {vehicle.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-gray-700">{vehicle.capacity}</td>
+                  <td className="py-3 px-4 text-gray-900 font-medium">{vehicle.capacity}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleEdit(vehicle)}
                         className="text-blue-600 hover:text-blue-800 transition-colors"
-                        title="Edit vehicle"
+                        title="Edit airplane"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(vehicle.id, vehicle.status)}
                         className="text-red-600 hover:text-red-800 transition-colors"
-                        title={vehicle.status === 'In Transit' ? 'Cannot delete vehicle while In Transit' : 'Delete vehicle'}
+                        title={vehicle.status === 'In Transit' ? 'Cannot delete airplane while In Transit' : 'Delete airplane'}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -308,12 +299,12 @@ export default function FleetTable() {
         </div>
       )}
 
-      {/* Add Vehicle Modal */}
+      {/* Add Airplane Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Add New Vehicle</h3>
+              <h3 className="text-xl font-bold text-gray-900">Add New Airplane</h3>
               <button
                 onClick={() => setShowAddModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -330,18 +321,7 @@ export default function FleetTable() {
                   value={addForm.name}
                   onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  placeholder="e.g., Truck-01"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                <input
-                  type="text"
-                  value={addForm.type}
-                  onChange={(e) => setAddForm({ ...addForm, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  placeholder="e.g., Heavy Truck"
+                  placeholder="e.g., Boeing 747"
                 />
               </div>
 
@@ -359,30 +339,30 @@ export default function FleetTable() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity (kg)</label>
                 <input
                   type="number"
                   value={addForm.capacity}
-                  onChange={(e) => setAddForm({ ...addForm, capacity: parseFloat(e.target.value) || 0 })}
+                  onChange={(e) => setAddForm({ ...addForm, capacity: parseFloat(e.target.value) })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                  placeholder="e.g., 5000"
+                  placeholder="e.g., 50000"
                 />
               </div>
+            </div>
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleAdd}
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  Add Vehicle
-                </button>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleAdd}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Add Airplane
+              </button>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
@@ -390,10 +370,10 @@ export default function FleetTable() {
 
       {/* Edit Modal */}
       {editingVehicle && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Edit Vehicle</h3>
+              <h3 className="text-xl font-bold text-gray-900">Edit Airplane</h3>
               <button
                 onClick={() => setEditingVehicle(null)}
                 className="text-gray-400 hover:text-gray-600"
@@ -409,16 +389,6 @@ export default function FleetTable() {
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                <input
-                  type="text"
-                  value={editForm.type}
-                  onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                 />
               </div>
@@ -443,7 +413,7 @@ export default function FleetTable() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity (kg)</label>
                 <input
                   type="number"
                   value={editForm.capacity}
@@ -451,21 +421,21 @@ export default function FleetTable() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                 />
               </div>
+            </div>
 
-              <div className="flex gap-3 pt-4">
-                <button
-                  onClick={handleUpdate}
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingVehicle(null)}
-                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleUpdate}
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditingVehicle(null)}
+                className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

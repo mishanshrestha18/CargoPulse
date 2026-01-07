@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Truck, Package, MapPin, XCircle, Users, Clock, TrendingUp, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { showToast } from '@/components/ToastContainer';
 
 interface ActiveShipment {
   id: string;
@@ -31,6 +33,7 @@ interface Driver {
 }
 
 export default function ActiveShipmentsList() {
+  const { addNotification } = useNotifications();
   const [shipments, setShipments] = useState<ActiveShipment[]>([]);
   const [idleDrivers, setIdleDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,52 +123,107 @@ export default function ActiveShipmentsList() {
   };
 
   const handleCancelShipment = async (shipment: ActiveShipment) => {
-    if (!confirm(`Cancel shipment to ${shipment.locations_destination?.name}?`)) return;
+    console.log('Cancel button clicked for shipment:', shipment.id);
+
+    if (!confirm(`Cancel shipment to ${shipment.locations_destination?.name}?`)) {
+      console.log('User cancelled the confirmation dialog');
+      return;
+    }
 
     try {
+      console.log('Starting cancellation process for shipment:', shipment.id);
+
       // Update shipment status to Cancelled
-      const { error: shipmentError } = await supabase
+      const { error: shipmentError, data: shipmentData } = await supabase
         .from('shipments')
         .update({ status: 'Cancelled' })
-        .eq('id', shipment.id);
+        .eq('id', shipment.id)
+        .select();
 
-      if (shipmentError) throw shipmentError;
+      if (shipmentError) {
+        console.error('❌ Shipment update error:', JSON.stringify(shipmentError, null, 2));
+        throw new Error(`Failed to update shipment: ${shipmentError.message || JSON.stringify(shipmentError)}`);
+      }
+      console.log('✅ Shipment status updated to Cancelled:', shipmentData);
 
       // Set driver back to Idle
       const { error: driverError } = await supabase
         .from('drivers')
         .update({ status: 'Idle' })
-        .eq('id', shipment.driver_id);
+        .eq('id', shipment.driver_id)
+        .select();
 
-      if (driverError) throw driverError;
+      if (driverError) {
+        console.error('❌ Driver update error:', JSON.stringify(driverError, null, 2));
+        throw new Error(`Failed to update driver: ${driverError.message || JSON.stringify(driverError)}`);
+      }
+      console.log('✅ Driver status updated to Idle');
 
       // Set vehicle back to Idle
       const { error: vehicleError } = await supabase
         .from('vehicles')
         .update({ status: 'Idle' })
-        .eq('id', shipment.vehicle_id);
+        .eq('id', shipment.vehicle_id)
+        .select();
 
-      if (vehicleError) throw vehicleError;
+      if (vehicleError) {
+        console.error('❌ Vehicle update error:', JSON.stringify(vehicleError, null, 2));
+        throw new Error(`Failed to update vehicle: ${vehicleError.message || JSON.stringify(vehicleError)}`);
+      }
+      console.log('✅ Vehicle status updated to Idle');
 
       // Return inventory
-      const { data: inventoryData } = await supabase
+      const { data: inventoryData, error: inventoryFetchError } = await supabase
         .from('inventory')
         .select('quantity')
         .eq('id', shipment.inventory_item_id)
         .single();
 
+      if (inventoryFetchError) {
+        console.error('❌ Inventory fetch error:', JSON.stringify(inventoryFetchError, null, 2));
+        throw new Error(`Failed to fetch inventory: ${inventoryFetchError.message || JSON.stringify(inventoryFetchError)}`);
+      }
+
       if (inventoryData) {
         const newQuantity = inventoryData.quantity + shipment.quantity;
         const newStatus = newQuantity === 0 ? 'Out of Stock' : newQuantity < 10 ? 'Low Stock' : 'In Stock';
 
-        await supabase
+        const { error: inventoryUpdateError } = await supabase
           .from('inventory')
           .update({ quantity: newQuantity, status: newStatus })
-          .eq('id', shipment.inventory_item_id);
+          .eq('id', shipment.inventory_item_id)
+          .select();
+
+        if (inventoryUpdateError) {
+          console.error('❌ Inventory update error:', JSON.stringify(inventoryUpdateError, null, 2));
+          throw new Error(`Failed to update inventory: ${inventoryUpdateError.message || JSON.stringify(inventoryUpdateError)}`);
+        }
+        console.log(`✅ Inventory updated: +${shipment.quantity} units, new quantity: ${newQuantity}`);
       }
 
+      // Show success message
+      const cancelMessage = `Shipment cancelled. ${shipment.quantity}x ${shipment.inventory?.item_name} returned to inventory.`;
+      setSuccessMessage(cancelMessage);
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+      // Add notification to sidebar
+      addNotification(
+        'cancel',
+        'Shipment Cancelled',
+        `${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name || 'destination'} was cancelled`
+      );
+
+      // Show toast notification
+      showToast(
+        'cancel',
+        'Shipment Cancelled',
+        `${shipment.quantity}x ${shipment.inventory?.item_name} returned to inventory`
+      );
+
+      console.log('Shipment cancelled successfully');
       await fetchData();
     } catch (err) {
+      console.error('Cancel shipment error:', err);
       setError(err instanceof Error ? err.message : 'Failed to cancel shipment');
     }
   };
@@ -173,6 +231,10 @@ export default function ActiveShipmentsList() {
   const handleSwapDriver = async (shipmentId: string, newDriverId: string) => {
     const shipment = shipments.find(s => s.id === shipmentId);
     if (!shipment) return;
+
+    const oldDriverName = shipment.drivers?.name || 'Unknown';
+    const newDriver = idleDrivers.find(d => String(d.id) === String(newDriverId));
+    const newDriverName = newDriver?.name || 'Unknown';
 
     try {
       // Set old driver to Idle
@@ -198,6 +260,20 @@ export default function ActiveShipmentsList() {
         .eq('id', shipmentId);
 
       if (shipmentError) throw shipmentError;
+
+      // Add notification to sidebar
+      addNotification(
+        'swap',
+        'Driver Swapped',
+        `${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name}: ${oldDriverName} → ${newDriverName}`
+      );
+
+      // Show toast notification
+      showToast(
+        'swap',
+        'Driver Swapped Successfully',
+        `${newDriverName} is now handling the shipment to ${shipment.locations_destination?.name}`
+      );
 
       setSwappingShipmentId(null);
       await fetchData();
@@ -389,7 +465,12 @@ export default function ActiveShipmentsList() {
                         Swap Driver
                       </button>
                       <button
-                        onClick={() => handleCancelShipment(shipment)}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleCancelShipment(shipment);
+                        }}
                         className="flex items-center gap-1 px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50 text-sm transition-colors"
                       >
                         <XCircle className="w-4 h-4" />

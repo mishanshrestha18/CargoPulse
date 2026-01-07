@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Truck, Warehouse, LayoutDashboard, Sun, Moon, Users } from 'lucide-react';
+import { Truck, Warehouse, LayoutDashboard, Sun, Moon, Users, Plane } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Fleet', href: '/fleet', icon: Truck },
+  { name: 'Airplanes', href: '/airplanes', icon: Plane },
   { name: 'Drivers', href: '/drivers', icon: Users },
   { name: 'Warehouse', href: '/warehouse', icon: Warehouse },
 ];

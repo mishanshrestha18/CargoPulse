@@ -62,9 +62,10 @@ export interface Shipment {
   inventory_item_id: string;
   quantity: number;
   arrival_time: string;
-  status: 'In Transit' | 'Delivered';
+  status: 'In Transit' | 'Delivered' | 'Cancelled';
   urgency: 'standard' | 'express';
   total_cost: number;
+  shipping_method?: 'truck' | 'plane';
 }
 
 export type ShipmentInsert = Omit<Shipment, 'id' | 'created_at'>;

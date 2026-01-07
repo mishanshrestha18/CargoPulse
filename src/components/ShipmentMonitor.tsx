@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { showToast } from '@/components/ToastContainer';
 
 /**
  * ShipmentMonitor - Background component that monitors shipments in transit
@@ -16,6 +18,7 @@ import { supabase } from '@/lib/supabase';
  * 4. Shows a browser notification
  */
 export default function ShipmentMonitor() {
+  const { addNotification } = useNotifications();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -30,7 +33,16 @@ export default function ShipmentMonitor() {
             driver_id,
             vehicle_id,
             arrival_time,
+            quantity,
+            inventory_item_id,
+            destination,
             drivers (
+              name
+            ),
+            inventory (
+              item_name
+            ),
+            locations_destination:locations!shipments_destination_fkey (
               name
             )
           `)
@@ -72,24 +84,38 @@ export default function ShipmentMonitor() {
 
               if (driverError) throw driverError;
 
-              // Get driver name for notification
+              // Get shipment details for notification
               const driverData = shipment.drivers as any;
               const driverName = driverData?.name || 'Unknown Driver';
+              const inventoryData = shipment.inventory as any;
+              const itemName = inventoryData?.item_name || 'Unknown Item';
+              const locationData = shipment.locations_destination as any;
+              const destinationName = locationData?.name || 'destination';
+
+              // Add notification to sidebar
+              addNotification(
+                'arrival',
+                'Shipment Arrived',
+                `${shipment.quantity}x ${itemName} arrived at ${destinationName}. ${driverName} is now available.`
+              );
+
+              // Show toast notification
+              showToast(
+                'arrival',
+                'Shipment Arrived!',
+                `${driverName} delivered ${shipment.quantity}x ${itemName} to ${destinationName}`
+              );
 
               // Show browser notification
               if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification('Shipment Arrived!', {
-                  body: `Driver ${driverName} is now free.`,
+                  body: `${driverName} delivered ${shipment.quantity}x ${itemName} to ${destinationName}`,
                   icon: '/favicon.ico',
                   tag: `shipment-${shipment.id}`,
                 });
               }
 
-              // Show alert as fallback
-              console.log(`Shipment arrived! Driver ${driverName} is now free.`);
-
-              // You can also trigger a toast notification here if you have a toast library
-              // toast.success(`Shipment arrived! Driver ${driverName} is now free.`);
+              console.log(`Shipment arrived! ${driverName} delivered ${shipment.quantity}x ${itemName} to ${destinationName}`);
             } catch (err) {
               console.error(`Error processing shipment ${shipment.id}:`, err);
             }

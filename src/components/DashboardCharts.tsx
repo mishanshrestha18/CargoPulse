@@ -38,7 +38,8 @@ interface RevenueData {
 
 interface DriverPerformanceData {
   name: string;
-  efficiency: number;
+  deliveries: number;
+  totalRevenue: number;
 }
 
 const FLEET_COLORS = {
@@ -47,24 +48,11 @@ const FLEET_COLORS = {
   'Maintenance': '#ef4444', // Red
 };
 
-// Mock data for Revenue Trends (last 6 months)
-const MOCK_REVENUE_DATA: RevenueData[] = [
-  { month: 'Jan', revenue: 12000 },
-  { month: 'Feb', revenue: 15000 },
-  { month: 'Mar', revenue: 13500 },
-  { month: 'Apr', revenue: 18000 },
-  { month: 'May', revenue: 22000 },
-  { month: 'Jun', revenue: 25000 },
-];
-
-// Mock data for Top Driver Performance
-const MOCK_DRIVER_PERFORMANCE: DriverPerformanceData[] = [
-  { name: 'John Smith', efficiency: 95 },
-  { name: 'Sarah Johnson', efficiency: 92 },
-  { name: 'Mike Chen', efficiency: 88 },
-  { name: 'Emily Davis', efficiency: 85 },
-  { name: 'Robert Brown', efficiency: 78 },
-];
+const AIRPLANE_COLORS = {
+  'In Transit': '#06b6d4', // Cyan
+  'Idle': '#fbbf24', // Yellow
+  'Maintenance': '#ef4444', // Red
+};
 
 // Custom tooltip for currency formatting
 const CurrencyTooltip = ({ active, payload }: any) => {
@@ -85,7 +73,10 @@ const CurrencyTooltip = ({ active, payload }: any) => {
 
 export default function DashboardCharts() {
   const [fleetData, setFleetData] = useState<FleetStatusData[]>([]);
+  const [airplaneData, setAirplaneData] = useState<FleetStatusData[]>([]);
   const [inventoryData, setInventoryData] = useState<InventoryData[]>([]);
+  const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
+  const [driverPerformance, setDriverPerformance] = useState<DriverPerformanceData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,23 +99,48 @@ export default function DashboardCharts() {
 
       if (inventoryError) throw inventoryError;
 
-      // Process Fleet Status Data
-      const statusCounts: { [key: string]: number } = {
+      // Fetch shipments for revenue and driver performance
+      const { data: shipments, error: shipmentsError } = await supabase
+        .from('shipments')
+        .select('*, drivers(name)')
+        .eq('status', 'Delivered');
+
+      if (shipmentsError) throw shipmentsError;
+
+      // Process Fleet Status Data (trucks only - exclude planes)
+      const fleetStatusCounts: { [key: string]: number } = {
+        'In Transit': 0,
+        'Idle': 0,
+        'Maintenance': 0,
+      };
+
+      const airplaneStatusCounts: { [key: string]: number } = {
         'In Transit': 0,
         'Idle': 0,
         'Maintenance': 0,
       };
 
       vehicles?.forEach((vehicle: Vehicle) => {
-        statusCounts[vehicle.status] = (statusCounts[vehicle.status] || 0) + 1;
+        const vehicleType = (vehicle.type || '').toLowerCase().trim();
+        if (vehicleType === 'plane') {
+          airplaneStatusCounts[vehicle.status] = (airplaneStatusCounts[vehicle.status] || 0) + 1;
+        } else {
+          fleetStatusCounts[vehicle.status] = (fleetStatusCounts[vehicle.status] || 0) + 1;
+        }
       });
 
-      const processedFleetData = Object.entries(statusCounts).map(([name, value]) => ({
+      const processedFleetData = Object.entries(fleetStatusCounts).map(([name, value]) => ({
+        name,
+        value,
+      }));
+
+      const processedAirplaneData = Object.entries(airplaneStatusCounts).map(([name, value]) => ({
         name,
         value,
       }));
 
       setFleetData(processedFleetData);
+      setAirplaneData(processedAirplaneData);
 
       // Process Inventory Data - Top 5 by quantity
       const sortedInventory = (inventory || [])
@@ -136,6 +152,57 @@ export default function DashboardCharts() {
         }));
 
       setInventoryData(sortedInventory);
+
+      // Process Revenue Trends - Last 6 months from actual shipments
+      const now = new Date();
+      const monthsData: { [key: string]: number } = {};
+
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = date.toLocaleDateString('en-US', { month: 'short' });
+        monthsData[monthKey] = 0;
+      }
+
+      shipments?.forEach((shipment: any) => {
+        const shipmentDate = new Date(shipment.created_at);
+        const monthKey = shipmentDate.toLocaleDateString('en-US', { month: 'short' });
+        if (monthsData.hasOwnProperty(monthKey)) {
+          monthsData[monthKey] += shipment.total_cost || 0;
+        }
+      });
+
+      const processedRevenueData = Object.entries(monthsData).map(([month, revenue]) => ({
+        month,
+        revenue: Math.round(revenue),
+      }));
+
+      setRevenueData(processedRevenueData);
+
+      // Process Driver Performance - Top 5 by deliveries and revenue
+      const driverStats: { [key: string]: { deliveries: number; totalRevenue: number } } = {};
+
+      shipments?.forEach((shipment: any) => {
+        const driverData = shipment.drivers as any;
+        const driverName = driverData?.name || 'Unknown';
+
+        if (!driverStats[driverName]) {
+          driverStats[driverName] = { deliveries: 0, totalRevenue: 0 };
+        }
+
+        driverStats[driverName].deliveries += 1;
+        driverStats[driverName].totalRevenue += shipment.total_cost || 0;
+      });
+
+      const processedDriverPerformance = Object.entries(driverStats)
+        .map(([name, stats]) => ({
+          name,
+          deliveries: stats.deliveries,
+          totalRevenue: Math.round(stats.totalRevenue),
+        }))
+        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+        .slice(0, 5);
+
+      setDriverPerformance(processedDriverPerformance);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch chart data');
     } finally {
@@ -145,6 +212,10 @@ export default function DashboardCharts() {
 
   useEffect(() => {
     fetchData();
+
+    // Auto-refresh every 30 seconds for real-time updates
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   if (error) {
@@ -169,11 +240,11 @@ export default function DashboardCharts() {
         </button>
       </div>
 
-      {/* First Row - Fleet Status & Inventory */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* Fleet Status Pie Chart */}
+      {/* First Row - Fleet & Airplane Status */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        {/* Fleet Status Pie Chart (Trucks) */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Fleet Status Distribution</h3>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Fleet Status (Trucks)</h3>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
@@ -211,9 +282,49 @@ export default function DashboardCharts() {
           )}
         </div>
 
+        {/* Airplane Status Pie Chart */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Airplane Status</h3>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : airplaneData.every(d => d.value === 0) ? (
+            <div className="h-80 flex items-center justify-center">
+              <p className="text-gray-500 dark:text-gray-400">No airplane data available</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={airplaneData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, value, percent }) =>
+                    value > 0 ? `${name}: ${value} (${(percent * 100).toFixed(0)}%)` : ''
+                  }
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {airplaneData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={AIRPLANE_COLORS[entry.name as keyof typeof AIRPLANE_COLORS]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
         {/* Top 5 Inventory Bar Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Top 5 Inventory Items by Quantity</h3>
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Top 5 Inventory Items</h3>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
@@ -265,116 +376,137 @@ export default function DashboardCharts() {
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Revenue Trends</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Revenue Trends (Real-Time)</h3>
           </div>
-          <ResponsiveContainer width="100%" height={320}>
-            <AreaChart
-              data={MOCK_REVENUE_DATA}
-              margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.1} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                dataKey="month"
-                stroke="#6b7280"
-                style={{ fontSize: '14px' }}
-              />
-              <YAxis
-                stroke="#6b7280"
-                style={{ fontSize: '14px' }}
-                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-              />
-              <Tooltip content={<CurrencyTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="revenue"
-                stroke="#10b981"
-                strokeWidth={3}
-                fillOpacity={1}
-                fill="url(#colorRevenue)"
-                name="Revenue"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Total (6 months)</span>
-              <span className="text-lg font-bold text-green-600 dark:text-green-400">
-                ${MOCK_REVENUE_DATA.reduce((sum, item) => sum + item.revenue, 0).toLocaleString()}
-              </span>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
             </div>
-          </div>
+          ) : revenueData.length === 0 || revenueData.every(d => d.revenue === 0) ? (
+            <div className="h-80 flex items-center justify-center">
+              <p className="text-gray-500 dark:text-gray-400">No revenue data available</p>
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={320}>
+                <AreaChart
+                  data={revenueData}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.1} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis
+                    dataKey="month"
+                    stroke="#6b7280"
+                    style={{ fontSize: '14px' }}
+                  />
+                  <YAxis
+                    stroke="#6b7280"
+                    style={{ fontSize: '14px' }}
+                    tickFormatter={(value) => value >= 1000 ? `$${(value / 1000).toFixed(0)}k` : `$${value}`}
+                  />
+                  <Tooltip content={<CurrencyTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#10b981"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#colorRevenue)"
+                    name="Revenue"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Total (6 months)</span>
+                  <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                    ${revenueData.reduce((sum, item) => sum + item.revenue, 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Top Driver Performance Horizontal Bar Chart */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
           <div className="flex items-center gap-2 mb-4">
             <Award className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Top Driver Performance</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Top Driver Performance (Real-Time)</h3>
           </div>
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart
-              data={MOCK_DRIVER_PERFORMANCE}
-              layout="horizontal"
-              margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis
-                type="number"
-                domain={[0, 100]}
-                stroke="#6b7280"
-                style={{ fontSize: '14px' }}
-                tickFormatter={(value) => `${value}%`}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                stroke="#6b7280"
-                style={{ fontSize: '14px' }}
-                width={90}
-              />
-              <Tooltip
-                formatter={(value: number) => [`${value}%`, 'Efficiency']}
-                contentStyle={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
-              />
-              <ReferenceLine
-                x={90}
-                stroke="#fbbf24"
-                strokeDasharray="5 5"
-                strokeWidth={2}
-                label={{
-                  value: 'Target: 90%',
-                  position: 'top',
-                  fill: '#f59e0b',
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}
-              />
-              <Bar
-                dataKey="efficiency"
-                fill="#3b82f6"
-                name="Efficiency Score"
-                radius={[0, 8, 8, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-600 dark:text-gray-400">Average Efficiency</span>
-              <span className="font-semibold text-blue-600 dark:text-blue-400">
-                {(MOCK_DRIVER_PERFORMANCE.reduce((sum, driver) => sum + driver.efficiency, 0) / MOCK_DRIVER_PERFORMANCE.length).toFixed(1)}%
-              </span>
+          {loading ? (
+            <div className="h-80 flex items-center justify-center">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
             </div>
-          </div>
+          ) : driverPerformance.length === 0 ? (
+            <div className="h-80 flex items-center justify-center">
+              <p className="text-gray-500 dark:text-gray-400">No driver performance data available</p>
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart
+                  data={driverPerformance}
+                  layout="horizontal"
+                  margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis
+                    type="number"
+                    stroke="#6b7280"
+                    style={{ fontSize: '14px' }}
+                    tickFormatter={(value) => `$${(value / 1000).toFixed(1)}k`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    stroke="#6b7280"
+                    style={{ fontSize: '14px' }}
+                    width={90}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (name === 'Revenue') return [`$${value.toLocaleString()}`, 'Revenue'];
+                      return [value, 'Deliveries'];
+                    }}
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Bar
+                    dataKey="totalRevenue"
+                    fill="#3b82f6"
+                    name="Revenue"
+                    radius={[0, 8, 8, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">Total Deliveries</span>
+                    <p className="font-semibold text-blue-600 dark:text-blue-400 text-lg">
+                      {driverPerformance.reduce((sum, driver) => sum + driver.deliveries, 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600 dark:text-gray-400">Total Revenue</span>
+                    <p className="font-semibold text-green-600 dark:text-green-400 text-lg">
+                      ${driverPerformance.reduce((sum, driver) => sum + driver.totalRevenue, 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
