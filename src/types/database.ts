@@ -60,6 +60,7 @@ export interface Shipment {
   origin: string;
   destination: string;
   inventory_item_id: string;
+  item_name: string; // Store item name for destination inventory creation
   quantity: number;
   arrival_time: string;
   status: 'In Transit' | 'Delivered' | 'Cancelled';

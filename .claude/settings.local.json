@@ -5,7 +5,10 @@
       "Bash(git commit:*)",
       "Bash(npm install:*)",
       "Bash(cat:*)",
-      "Bash(npx supabase:*)"
+      "Bash(npx supabase:*)",
+      "Bash(if not exist supabasemigrations mkdir supabasemigrations)",
+      "Bash(node scripts/verify-setup.js:*)",
+      "Bash(node:*)"
     ]
   }
 }

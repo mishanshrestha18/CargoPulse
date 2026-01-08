@@ -35,12 +35,17 @@ export default function ShipmentMonitor() {
             arrival_time,
             quantity,
             inventory_item_id,
+            item_name,
             destination,
+            origin,
             drivers (
               name
             ),
             inventory (
-              item_name
+              item_name,
+              price_per_unit,
+              sku,
+              status
             ),
             locations_destination:locations!shipments_destination_fkey (
               name
@@ -84,13 +89,71 @@ export default function ShipmentMonitor() {
 
               if (driverError) throw driverError;
 
+              // === INVENTORY TRANSFER LOGIC ===
+              // Move stock from origin to destination
+              const originInventoryData = shipment.inventory as any;
+              const itemNameToTransfer = shipment.item_name || originInventoryData?.item_name;
+              const locationData = shipment.locations_destination as any;
+              const destinationName = locationData?.name || 'destination';
+
+              if (itemNameToTransfer && destinationName) {
+                try {
+                  // Step A: Check if item exists at destination (using location NAME, not ID)
+                  const { data: existingInventory, error: checkError } = await supabase
+                    .from('inventory')
+                    .select('*')
+                    .eq('location', destinationName)
+                    .eq('item_name', itemNameToTransfer)
+                    .maybeSingle();
+
+                  if (checkError) {
+                    console.error('Error checking destination inventory:', checkError);
+                  } else {
+                    // Step B: Upsert logic
+                    if (existingInventory) {
+                      // UPDATE: Item exists at destination, increment quantity
+                      const { error: updateError } = await supabase
+                        .from('inventory')
+                        .update({
+                          quantity: existingInventory.quantity + shipment.quantity
+                        })
+                        .eq('id', existingInventory.id);
+
+                      if (updateError) {
+                        console.error('Error updating destination inventory:', updateError);
+                      } else {
+                        console.log(`✅ Updated inventory at ${destinationName}: ${itemNameToTransfer} +${shipment.quantity} units (now ${existingInventory.quantity + shipment.quantity})`);
+                      }
+                    } else {
+                      // INSERT: Item doesn't exist at destination, create new inventory row
+                      const { error: insertError } = await supabase
+                        .from('inventory')
+                        .insert({
+                          item_name: itemNameToTransfer,
+                          quantity: shipment.quantity,
+                          location: destinationName,
+                          status: 'In Stock',
+                          price_per_unit: originInventoryData?.price_per_unit || 0,
+                          sku: originInventoryData?.sku || `SKU-${Date.now()}`,
+                        });
+
+                      if (insertError) {
+                        console.error('Error inserting destination inventory:', insertError);
+                      } else {
+                        console.log(`✅ Created new inventory at ${destinationName}: ${itemNameToTransfer} (${shipment.quantity} units)`);
+                      }
+                    }
+                  }
+                } catch (inventoryErr) {
+                  console.error('Error during inventory transfer:', inventoryErr);
+                }
+              }
+
               // Get shipment details for notification
               const driverData = shipment.drivers as any;
               const driverName = driverData?.name || 'Unknown Driver';
-              const inventoryData = shipment.inventory as any;
-              const itemName = inventoryData?.item_name || 'Unknown Item';
-              const locationData = shipment.locations_destination as any;
-              const destinationName = locationData?.name || 'destination';
+              const itemName = shipment.item_name || originInventoryData?.item_name || 'Unknown Item';
+              // destinationName already declared above for inventory transfer
 
               // Add notification to sidebar
               addNotification(

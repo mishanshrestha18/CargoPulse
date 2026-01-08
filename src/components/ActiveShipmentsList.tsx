@@ -13,6 +13,7 @@ interface ActiveShipment {
   origin: string;
   destination: string;
   inventory_item_id: string;
+  item_name?: string;
   quantity: number;
   arrival_time: string;
   created_at: string;
@@ -23,7 +24,7 @@ interface ActiveShipment {
   vehicles: { name: string };
   locations_origin: { name: string };
   locations_destination: { name: string };
-  inventory: { item_name: string };
+  inventory: { item_name: string; price_per_unit?: number; sku?: string };
 }
 
 interface Driver {
@@ -59,7 +60,7 @@ export default function ActiveShipmentsList() {
         supabase.from('drivers').select('id, name'),
         supabase.from('vehicles').select('id, name'),
         supabase.from('locations').select('id, name'),
-        supabase.from('inventory').select('id, item_name'),
+        supabase.from('inventory').select('id, item_name, price_per_unit, sku'),
         supabase.from('drivers').select('*').eq('status', 'Idle').order('name'),
       ]);
 
@@ -308,13 +309,63 @@ export default function ActiveShipmentsList() {
 
       if (vehicleError) throw vehicleError;
 
-      // Show success notification
-      setSuccessMessage(
-        `🎉 Shipment completed! ${shipment.vehicles?.name} delivered ${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name}`
+      // === INVENTORY TRANSFER LOGIC ===
+      const itemNameToTransfer = shipment.item_name || shipment.inventory?.item_name;
+      const destinationName = shipment.locations_destination?.name;
+
+      if (itemNameToTransfer && destinationName) {
+        try {
+          // Check if item exists at destination
+          const { data: existingInventory, error: checkError } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('location', destinationName)
+            .eq('item_name', itemNameToTransfer)
+            .maybeSingle();
+
+          if (!checkError) {
+            if (existingInventory) {
+              // UPDATE: Item exists, increment quantity
+              await supabase
+                .from('inventory')
+                .update({
+                  quantity: existingInventory.quantity + shipment.quantity
+                })
+                .eq('id', existingInventory.id);
+              console.log(`✅ Updated inventory at ${destinationName}: ${itemNameToTransfer} +${shipment.quantity}`);
+            } else {
+              // INSERT: Create new inventory item
+              await supabase
+                .from('inventory')
+                .insert({
+                  item_name: itemNameToTransfer,
+                  quantity: shipment.quantity,
+                  location: destinationName,
+                  status: 'In Stock',
+                  price_per_unit: shipment.inventory?.price_per_unit || 0,
+                  sku: shipment.inventory?.sku || `SKU-${Date.now()}`,
+                });
+              console.log(`✅ Created new inventory at ${destinationName}: ${itemNameToTransfer}`);
+            }
+          }
+        } catch (inventoryErr) {
+          console.error('Error during inventory transfer:', inventoryErr);
+        }
+      }
+
+      // Add notification to sidebar
+      addNotification(
+        'arrival',
+        'Shipment Arrived',
+        `${shipment.quantity}x ${shipment.inventory?.item_name} arrived at ${shipment.locations_destination?.name}. ${shipment.drivers?.name} is now available.`
       );
 
-      // Clear success message after 5 seconds
-      setTimeout(() => setSuccessMessage(null), 5000);
+      // Show toast notification
+      showToast(
+        'arrival',
+        'Shipment Delivered!',
+        `${shipment.drivers?.name} delivered ${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name}`
+      );
 
       await fetchData();
     } catch (err) {

@@ -61,7 +61,6 @@ export default function ShipmentCreator() {
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const [form, setForm] = useState<ShipmentForm>({
     origin: '',
@@ -422,6 +421,7 @@ export default function ShipmentCreator() {
           origin: form.origin,
           destination: form.destination,
           inventory_item_id: breakdown.inventoryItem.id,
+          item_name: breakdown.inventoryItem.item_name, // Store item name for destination inventory
           quantity: productItem.quantity,
           arrival_time: arrivalTime.toISOString(),
           status: 'In Transit',
@@ -484,11 +484,6 @@ export default function ShipmentCreator() {
       const productSummary = form.products.length === 1
         ? `${form.products[0].quantity} units of ${priceBreakdown.products[0].inventoryItem.item_name}`
         : `${form.products.length} products (${form.products.reduce((sum, p) => sum + p.quantity, 0)} total units)`;
-
-      const methodLabel = form.shippingMethod === 'plane' ? '✈️ Air Freight' : '🚚 Ground Transport';
-      const successMessage = `${methodLabel} shipment dispatched successfully! ${productSummary} sent with ${driverName}. ETA: ${arrivalTime.toLocaleString()}. Total cost: $${priceBreakdown.totalCost.toFixed(2)}`;
-
-      setSuccess(successMessage);
 
       // Add notification to sidebar
       addNotification(
@@ -644,7 +639,6 @@ export default function ShipmentCreator() {
       });
       setPriceBreakdown(null);
       localStorage.removeItem('shipmentCreatorForm');
-      setSuccess(null);
     }
   };
 
@@ -657,12 +651,6 @@ export default function ShipmentCreator() {
           Live Sync {lastSyncTime && `(${lastSyncTime.toLocaleTimeString()})`}
         </span>
       </div>
-
-      {success && (
-        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-          <p className="text-green-800 dark:text-green-200 text-sm">{success}</p>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column - Shipment Details */}
@@ -808,7 +796,20 @@ export default function ShipmentCreator() {
               >
                 <option value="">Select product...</option>
                 {inventory
-                  .filter(item => item.quantity > 0 && !form.products.some(p => String(p.inventoryItemId) === String(item.id)))
+                  .filter(item => {
+                    // Only show items from the selected origin location
+                    if (!form.origin) return false;
+
+                    // Get the selected origin location name
+                    const selectedOriginLocation = locations.find(loc => String(loc.id) === String(form.origin));
+                    if (!selectedOriginLocation) return false;
+
+                    // Match inventory item's location (text) with location name
+                    const itemBelongsToOrigin = String(item.location).trim().toLowerCase() === String(selectedOriginLocation.name).trim().toLowerCase();
+                    const hasQuantity = item.quantity > 0;
+                    const notAlreadyAdded = !form.products.some(p => String(p.inventoryItemId) === String(item.id));
+                    return itemBelongsToOrigin && hasQuantity && notAlreadyAdded;
+                  })
                   .map(item => (
                     <option key={item.id} value={item.id}>
                       {item.item_name} - Available: {item.quantity} units @ ${item.price_per_unit.toFixed(2)}
