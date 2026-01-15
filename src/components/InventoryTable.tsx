@@ -247,20 +247,20 @@ export default function InventoryTable() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Inventory Overview</h2>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Inventory Overview</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={downloadCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 dark:bg-green-700 text-white rounded-md hover:bg-green-700 dark:hover:bg-green-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
           >
             <Download className="w-4 h-4" />
             CSV Export
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Item
@@ -268,7 +268,7 @@ export default function InventoryTable() {
           <button
             onClick={fetchInventory}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -279,20 +279,20 @@ export default function InventoryTable() {
       {/* Search and Filter Bar */}
       <div className="flex items-center gap-4 mb-6">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 dark:text-gray-400" />
           <input
             type="text"
             placeholder="Search items..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
           />
         </div>
         <div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-gray-700"
           >
             <option value="All">All Status</option>
             <option value="In Stock">In Stock</option>
@@ -303,38 +303,38 @@ export default function InventoryTable() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-800 border border-red-200 rounded-md">
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-md">
           {error}
         </div>
       )}
 
       {loading && inventory.length === 0 ? (
         <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-          <span className="ml-2 text-gray-500">Loading inventory...</span>
+          <RefreshCw className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500 dark:text-gray-400" />
+          <span className="ml-2 text-gray-500 dark:text-gray-400">Loading inventory...</span>
         </div>
       ) : filteredInventory.length === 0 ? (
         <div className="text-center py-12">
           <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">
+          <p className="text-gray-500 dark:text-gray-400">
             {inventory.length === 0 
               ? 'No inventory items found. Add one to get started!' 
               : 'No items match your search criteria.'}
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
           <table className="w-full">
             <thead>
-              <tr className="border-b-2 border-gray-200">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">SKU</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Item Name</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Quantity</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Location</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Price/Unit</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Max Discount</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
+              <tr className="border-b-2 border-gray-200 dark:border-gray-700">
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">SKU</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Item Name</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Quantity</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Location</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Price/Unit</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Max Discount</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -347,22 +347,22 @@ export default function InventoryTable() {
                   'text-green-600 bg-green-50';
 
                 return (
-                  <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <tr key={item.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="py-3 px-4">
-                      <span className="text-gray-900 font-mono text-sm">{item.sku}</span>
+                      <span className="text-white font-mono text-sm">{item.sku}</span>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <Package className="w-4 h-4 text-gray-600" />
-                        <span className="text-gray-900 font-medium">{item.item_name}</span>
+                        <Package className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                        <span className="text-gray-900 dark:text-gray-100 font-medium">{item.item_name}</span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-gray-900 font-semibold">{item.quantity}</span>
+                      <span className="text-white font-semibold">{item.quantity}</span>
                     </td>
-                    <td className="py-3 px-4 text-gray-700">{item.location}</td>
-                    <td className="py-3 px-4 text-gray-900 font-medium">${(item.price_per_unit || 0).toFixed(2)}</td>
-                    <td className="py-3 px-4 text-gray-900">{item.max_discount || 0}%</td>
+                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{item.location}</td>
+                    <td className="py-3 px-4 text-gray-900 dark:text-gray-100 font-medium">${(item.price_per_unit || 0).toFixed(2)}</td>
+                    <td className="py-3 px-4 text-gray-900 dark:text-gray-100">{item.max_discount || 0}%</td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
                         {currentStatus}
@@ -372,14 +372,14 @@ export default function InventoryTable() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleEdit(item)}
-                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
                           title="Edit item"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
-                          className="text-red-600 hover:text-red-800 transition-colors"
+                          className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
                           title="Delete item"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -397,13 +397,13 @@ export default function InventoryTable() {
 
       {/* Add Item Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black dark:bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Add New Inventory Item</h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add New Inventory Item</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 dark:text-gray-400"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -415,45 +415,45 @@ export default function InventoryTable() {
                 <h4 className="font-semibold text-gray-900 text-sm uppercase tracking-wide">Basic Information</h4>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">SKU</label>
                   <input
                     type="text"
                     value={addForm.sku}
                     onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                     placeholder="e.g., SKU-001"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item Name</label>
                   <input
                     type="text"
                     value={addForm.item_name}
                     onChange={(e) => setAddForm({ ...addForm, item_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                     placeholder="e.g., Laptop"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity</label>
                   <input
                     type="number"
                     value={addForm.quantity}
                     onChange={(e) => setAddForm({ ...addForm, quantity: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                     placeholder="e.g., 100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location</label>
                   <input
                     type="text"
                     value={addForm.location}
                     onChange={(e) => setAddForm({ ...addForm, location: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                     placeholder="e.g., Warehouse A"
                   />
                 </div>
@@ -473,13 +473,13 @@ export default function InventoryTable() {
                 <h4 className="font-semibold text-gray-900 text-sm uppercase tracking-wide">Pricing & Discounts</h4>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price per Unit ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Price per Unit ($)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={addForm.price_per_unit}
                     onChange={(e) => setAddForm({ ...addForm, price_per_unit: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                     placeholder="e.g., 99.99"
                   />
                 </div>
@@ -495,7 +495,7 @@ export default function InventoryTable() {
                         min="0"
                         value={addForm.discount_tier_1_qty}
                         onChange={(e) => setAddForm({ ...addForm, discount_tier_1_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 10"
                       />
                     </div>
@@ -507,7 +507,7 @@ export default function InventoryTable() {
                         max="20"
                         value={addForm.discount_tier_1_percent}
                         onChange={(e) => setAddForm({ ...addForm, discount_tier_1_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 5"
                       />
                     </div>
@@ -521,7 +521,7 @@ export default function InventoryTable() {
                         min="0"
                         value={addForm.discount_tier_2_qty}
                         onChange={(e) => setAddForm({ ...addForm, discount_tier_2_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 50"
                       />
                     </div>
@@ -533,7 +533,7 @@ export default function InventoryTable() {
                         max="20"
                         value={addForm.discount_tier_2_percent}
                         onChange={(e) => setAddForm({ ...addForm, discount_tier_2_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 10"
                       />
                     </div>
@@ -547,7 +547,7 @@ export default function InventoryTable() {
                         min="0"
                         value={addForm.discount_tier_3_qty}
                         onChange={(e) => setAddForm({ ...addForm, discount_tier_3_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 100"
                       />
                     </div>
@@ -559,7 +559,7 @@ export default function InventoryTable() {
                         max="20"
                         value={addForm.discount_tier_3_percent}
                         onChange={(e) => setAddForm({ ...addForm, discount_tier_3_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 15"
                       />
                     </div>
@@ -581,7 +581,7 @@ export default function InventoryTable() {
               </button>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
               >
                 Cancel
               </button>
@@ -592,13 +592,13 @@ export default function InventoryTable() {
 
       {/* Edit Modal */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black dark:bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Edit Inventory Item</h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Inventory Item</h3>
               <button
                 onClick={() => setEditingItem(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 dark:text-gray-400"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -610,32 +610,32 @@ export default function InventoryTable() {
                 <h4 className="font-semibold text-gray-900 text-sm uppercase tracking-wide">Basic Information</h4>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item Name</label>
                   <input
                     type="text"
                     value={editForm.item_name}
                     onChange={(e) => setEditForm({ ...editForm, item_name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quantity</label>
                   <input
                     type="number"
                     value={editForm.quantity}
                     onChange={(e) => setEditForm({ ...editForm, quantity: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Location</label>
                   <input
                     type="text"
                     value={editForm.location}
                     onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
@@ -654,13 +654,13 @@ export default function InventoryTable() {
                 <h4 className="font-semibold text-gray-900 text-sm uppercase tracking-wide">Pricing & Discounts</h4>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price per Unit ($)</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Price per Unit ($)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={editForm.price_per_unit}
                     onChange={(e) => setEditForm({ ...editForm, price_per_unit: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   />
                 </div>
 
@@ -675,7 +675,7 @@ export default function InventoryTable() {
                         min="0"
                         value={editForm.discount_tier_1_qty}
                         onChange={(e) => setEditForm({ ...editForm, discount_tier_1_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 10"
                       />
                     </div>
@@ -687,7 +687,7 @@ export default function InventoryTable() {
                         max="20"
                         value={editForm.discount_tier_1_percent}
                         onChange={(e) => setEditForm({ ...editForm, discount_tier_1_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 5"
                       />
                     </div>
@@ -701,7 +701,7 @@ export default function InventoryTable() {
                         min="0"
                         value={editForm.discount_tier_2_qty}
                         onChange={(e) => setEditForm({ ...editForm, discount_tier_2_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 50"
                       />
                     </div>
@@ -713,7 +713,7 @@ export default function InventoryTable() {
                         max="20"
                         value={editForm.discount_tier_2_percent}
                         onChange={(e) => setEditForm({ ...editForm, discount_tier_2_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 10"
                       />
                     </div>
@@ -727,7 +727,7 @@ export default function InventoryTable() {
                         min="0"
                         value={editForm.discount_tier_3_qty}
                         onChange={(e) => setEditForm({ ...editForm, discount_tier_3_qty: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 100"
                       />
                     </div>
@@ -739,7 +739,7 @@ export default function InventoryTable() {
                         max="20"
                         value={editForm.discount_tier_3_percent}
                         onChange={(e) => setEditForm({ ...editForm, discount_tier_3_percent: Math.min(20, parseInt(e.target.value) || 0) })}
-                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                         placeholder="e.g., 15"
                       />
                     </div>
@@ -761,7 +761,7 @@ export default function InventoryTable() {
               </button>
               <button
                 onClick={() => setEditingItem(null)}
-                className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
               >
                 Cancel
               </button>

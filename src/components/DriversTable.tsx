@@ -164,7 +164,7 @@ export default function DriversTable() {
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Driver
@@ -210,14 +210,14 @@ export default function DriversTable() {
       ) : filteredDrivers.length === 0 ? (
         <div className="text-center py-12">
           <Users className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-500 dark:text-gray-400">
+          <p className="text-gray-500 dark:text-gray-400 dark:text-gray-400">
             {searchTerm || filterStatus !== 'All' ? 'No drivers found matching your filters' : 'No drivers found. Add your first driver to get started.'}
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
           <table className="w-full">
-            <thead>
+            <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr className="border-b-2 border-gray-200 dark:border-gray-700">
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Name</th>
                 <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
@@ -250,7 +250,7 @@ export default function DriversTable() {
                     <td className="py-3 px-4">
                       {driver.phone ? (
                         <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                          <Phone className="w-4 h-4 text-gray-500" />
+                          <Phone className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                           <span className="font-mono text-sm">{driver.phone}</span>
                         </div>
                       ) : (
@@ -260,7 +260,7 @@ export default function DriversTable() {
                     <td className="py-3 px-4">
                       {driver.license_number ? (
                         <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                          <CreditCard className="w-4 h-4 text-gray-500" />
+                          <CreditCard className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                           <span className="font-mono text-sm">{driver.license_number}</span>
                         </div>
                       ) : (
@@ -277,14 +277,14 @@ export default function DriversTable() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleEdit(driver)}
-                          className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
                           title="Edit driver"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(driver.id, driver.status)}
-                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                          className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 dark:text-red-400 dark:hover:text-red-300 transition-colors"
                           title={driver.status === 'Busy' ? 'Cannot delete driver while Busy' : 'Delete driver'}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -301,7 +301,7 @@ export default function DriversTable() {
 
       {/* Add Driver Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black dark:bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add New Driver</h3>
@@ -373,7 +373,7 @@ export default function DriversTable() {
               <button
                 onClick={handleAdd}
                 disabled={!addForm.name}
-                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-blue-600 dark:bg-blue-700 text-white py-2 px-4 rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Add Driver
               </button>
@@ -390,7 +390,7 @@ export default function DriversTable() {
 
       {/* Edit Driver Modal */}
       {editingDriver && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black dark:bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Driver</h3>
@@ -465,7 +465,7 @@ export default function DriversTable() {
               <button
                 onClick={handleUpdate}
                 disabled={!editForm.name}
-                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-blue-600 dark:bg-blue-700 text-white py-2 px-4 rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Changes
               </button>

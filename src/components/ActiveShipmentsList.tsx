@@ -495,7 +495,7 @@ export default function ActiveShipmentsList() {
             return (
               <div
                 key={shipment.id}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-lg transition-shadow"
+                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
@@ -571,7 +571,7 @@ export default function ActiveShipmentsList() {
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div
-                      className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
+                      className="bg-gradient-to-r from-blue-500 to-green-500 dark:from-blue-600 dark:to-green-600 h-2 rounded-full transition-all duration-500"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -581,12 +581,12 @@ export default function ActiveShipmentsList() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 dark:bg-gray-800">
                   {!isSwapping ? (
                     <>
                       <button
                         onClick={() => handleFinishShipment(shipment)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 text-sm transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 dark:hover:bg-green-900/50 text-sm transition-colors"
                         title="Mark shipment as delivered"
                       >
                         <CheckCircle className="w-4 h-4" />
@@ -595,7 +595,7 @@ export default function ActiveShipmentsList() {
                       <button
                         onClick={() => setSwappingShipmentId(shipment.id)}
                         disabled={idleDrivers.length === 0 || shipment.shipping_method === 'plane'}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 dark:hover:bg-blue-900/50 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         title={shipment.shipping_method === 'plane' ? 'Cannot swap pilots during flight' : 'Swap driver to another available driver'}
                       >
                         <Users className="w-4 h-4" />
@@ -608,7 +608,7 @@ export default function ActiveShipmentsList() {
                           e.stopPropagation();
                           handleCancelShipment(shipment);
                         }}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50 text-sm transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50 dark:hover:bg-red-900/50 text-sm transition-colors"
                       >
                         <XCircle className="w-4 h-4" />
                         Cancel
@@ -618,7 +618,7 @@ export default function ActiveShipmentsList() {
                     <div className="flex items-center gap-2 w-full">
                       <select
                         onChange={(e) => handleSwapDriver(shipment.id, e.target.value)}
-                        className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-100"
+                        className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-700 dark:text-gray-100"
                       >
                         <option value="">Select new driver...</option>
                         {idleDrivers.map((driver) => (

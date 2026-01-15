@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, RefreshCw, Trash2, Pencil, X, Plus, Download, Search } from 'lucide-react';
+import { Truck, RefreshCw, Trash2, Pencil, X, Plus, Download, Search, Wrench, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Vehicle, VehicleInsert } from '@/types/database';
+import type { Vehicle, VehicleInsert, MaintenanceLogInsert } from '@/types/database';
 
 export default function FleetTable() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -13,7 +13,12 @@ export default function FleetTable() {
   const [editForm, setEditForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: '', type: '', status: 'Idle' as Vehicle['status'], capacity: 0 });
-  
+
+  // Maintenance Modal State
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [maintenanceVehicle, setMaintenanceVehicle] = useState<Vehicle | null>(null);
+  const [maintenanceForm, setMaintenanceForm] = useState({ description: '', cost: 0 });
+
   // Search and Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -26,7 +31,7 @@ export default function FleetTable() {
       const { data, error: fetchError } = await supabase
         .from('vehicles')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false});
 
       if (fetchError) throw fetchError;
 
@@ -46,11 +51,13 @@ export default function FleetTable() {
     return () => clearInterval(interval);
   }, []);
 
-  // Filtered Vehicles
+  // Filtered Vehicles (exclude airplanes - they're not part of fleet)
   const filteredVehicles = vehicles.filter(vehicle => {
+    const vehicleType = (vehicle.type || '').toLowerCase().trim();
+    const isNotAirplane = vehicleType !== 'plane' && !vehicleType.includes('plane') && !vehicleType.includes('airplane') && !vehicleType.includes('aircraft');
     const matchesSearch = vehicle.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'All' || vehicle.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    return isNotAirplane && matchesSearch && matchesStatus;
   });
 
   const getStatusColor = (status: Vehicle['status']) => {
@@ -146,14 +153,96 @@ export default function FleetTable() {
     }
   };
 
+  // Maintenance Functions
+  const handleStartMaintenance = (vehicle: Vehicle) => {
+    setMaintenanceVehicle(vehicle);
+    setMaintenanceForm({ description: '', cost: 0 });
+    setShowMaintenanceModal(true);
+  };
+
+  const handleReportIssue = async () => {
+    if (!maintenanceVehicle) return;
+
+    if (!maintenanceForm.description.trim()) {
+      setError('Please provide a maintenance description');
+      return;
+    }
+
+    if (maintenanceForm.cost < 0) {
+      setError('Cost cannot be negative');
+      return;
+    }
+
+    try {
+      // Update vehicle status to Maintenance
+      const { error: vehicleError } = await supabase
+        .from('vehicles')
+        .update({ status: 'Maintenance' })
+        .eq('id', maintenanceVehicle.id);
+
+      if (vehicleError) throw vehicleError;
+
+      // Insert maintenance log
+      const maintenanceLog: MaintenanceLogInsert = {
+        vehicle_id: maintenanceVehicle.id,
+        description: maintenanceForm.description,
+        cost: maintenanceForm.cost,
+        status: 'In Progress',
+      };
+
+      const { error: logError } = await supabase
+        .from('maintenance_logs')
+        .insert([maintenanceLog]);
+
+      if (logError) throw logError;
+
+      setShowMaintenanceModal(false);
+      setMaintenanceVehicle(null);
+      setMaintenanceForm({ description: '', cost: 0 });
+      await fetchVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to report maintenance issue');
+    }
+  };
+
+  const handleCompleteMaintenance = async (vehicle: Vehicle) => {
+    if (!confirm(`Complete maintenance for ${vehicle.name}?`)) return;
+
+    try {
+      // Update vehicle status to Idle
+      const { error: vehicleError } = await supabase
+        .from('vehicles')
+        .update({ status: 'Idle' })
+        .eq('id', vehicle.id);
+
+      if (vehicleError) throw vehicleError;
+
+      // Update maintenance log to Completed
+      const { error: logError } = await supabase
+        .from('maintenance_logs')
+        .update({
+          status: 'Completed',
+          completed_at: new Date().toISOString()
+        })
+        .eq('vehicle_id', vehicle.id)
+        .eq('status', 'In Progress');
+
+      if (logError) throw logError;
+
+      await fetchVehicles();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to complete maintenance');
+    }
+  };
+
   // CSV Export Function
   const downloadCSV = () => {
     // Use filtered vehicles for export
     const dataToExport = filteredVehicles;
-    
+
     // Define headers
     const headers = ['Name', 'Type', 'Status', 'Capacity'];
-    
+
     // Convert data to CSV format
     const csvRows = [
       headers.join(','), // header row
@@ -180,20 +269,20 @@ export default function FleetTable() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Fleet Overview</h2>
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Fleet Overview</h2>
         <div className="flex items-center gap-2">
           <button
             onClick={downloadCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 dark:bg-green-700 text-white rounded-md hover:bg-green-700 dark:hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 transition-colors shadow-sm"
           >
             <Download className="w-4 h-4" />
             CSV Export
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" />
             Add Vehicle
@@ -201,7 +290,7 @@ export default function FleetTable() {
           <button
             onClick={fetchVehicles}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -212,20 +301,20 @@ export default function FleetTable() {
       {/* Search and Filter Bar */}
       <div className="flex items-center gap-4 mb-6">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder="Search vehicles..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 placeholder-gray-500 dark:placeholder-gray-400"
           />
         </div>
         <div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
           >
             <option value="All">All Status</option>
             <option value="In Transit">In Transit</option>
@@ -236,65 +325,97 @@ export default function FleetTable() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-800 border border-red-200 rounded-md">
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-md">
           {error}
         </div>
       )}
 
       {loading && vehicles.length === 0 ? (
         <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-          <span className="ml-2 text-gray-500">Loading vehicles...</span>
+          <RefreshCw className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500" />
+          <span className="ml-2 text-gray-500 dark:text-gray-400">Loading vehicles...</span>
         </div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12">
-          <Truck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">
-            {vehicles.length === 0 
-              ? 'No vehicles found. Add one to get started!' 
+          <Truck className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+          <p className="text-gray-500 dark:text-gray-400">
+            {vehicles.length === 0
+              ? 'No vehicles found. Add one to get started!'
               : 'No vehicles match your search criteria.'}
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
           <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-gray-200">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Name</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Type</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Capacity</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
+            <thead className="bg-gray-50 dark:bg-gray-900/50">
+              <tr className="border-b-2 border-gray-200 dark:border-gray-700">
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Name</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Type</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Capacity</th>
+                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredVehicles.map((vehicle) => (
-                <tr key={vehicle.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <tr key={vehicle.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-gray-600" />
-                      <span className="text-gray-900 font-medium">{vehicle.name}</span>
+                      <Truck className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                      <span className="text-gray-900 dark:text-gray-100 font-medium">{vehicle.name}</span>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-gray-700">{vehicle.type}</td>
+                  <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{vehicle.type}</td>
                   <td className="py-3 px-4">
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(vehicle.status)}`}>
                       {vehicle.status}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-gray-700">{vehicle.capacity}</td>
+                  <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{vehicle.capacity}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
+                      {/* Service Button */}
+                      {vehicle.status === 'Idle' && (
+                        <button
+                          onClick={() => handleStartMaintenance(vehicle)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-md hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors text-sm"
+                          title="Report maintenance issue"
+                        >
+                          <Wrench className="w-4 h-4" />
+                          Service
+                        </button>
+                      )}
+                      {vehicle.status === 'Maintenance' && (
+                        <button
+                          onClick={() => handleCompleteMaintenance(vehicle)}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors text-sm"
+                          title="Complete maintenance and return to service"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Complete Repair
+                        </button>
+                      )}
+                      {vehicle.status === 'In Transit' && (
+                        <button
+                          disabled
+                          className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 rounded-md cursor-not-allowed text-sm"
+                          title="Cannot service vehicle while in transit"
+                        >
+                          <Wrench className="w-4 h-4" />
+                          Service
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleEdit(vehicle)}
-                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
                         title="Edit vehicle"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(vehicle.id, vehicle.status)}
-                        className="text-red-600 hover:text-red-800 transition-colors"
+                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
                         title={vehicle.status === 'In Transit' ? 'Cannot delete vehicle while In Transit' : 'Delete vehicle'}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -308,15 +429,96 @@ export default function FleetTable() {
         </div>
       )}
 
+      {/* Maintenance Modal */}
+      {showMaintenanceModal && maintenanceVehicle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black dark:bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Report Maintenance Issue</h3>
+              <button
+                onClick={() => {
+                  setShowMaintenanceModal(false);
+                  setMaintenanceVehicle(null);
+                  setError(null);
+                }}
+                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-md">
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-blue-700 dark:text-blue-400" />
+                <span className="font-semibold text-blue-900 dark:text-blue-300">{maintenanceVehicle.name}</span>
+              </div>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                This vehicle will be marked as "Maintenance" and unavailable for shipments.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Description <span className="text-red-500 dark:text-red-400">*</span>
+                </label>
+                <textarea
+                  value={maintenanceForm.description}
+                  onChange={(e) => setMaintenanceForm({ ...maintenanceForm, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 placeholder-gray-500 dark:placeholder-gray-400"
+                  placeholder="e.g., Oil change, tire replacement, engine repair..."
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Estimated Cost ($)
+                </label>
+                <input
+                  type="number"
+                  value={maintenanceForm.cost}
+                  onChange={(e) => setMaintenanceForm({ ...maintenanceForm, cost: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700"
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={handleReportIssue}
+                  className="flex-1 flex items-center justify-center gap-2 bg-orange-600 dark:bg-orange-700 text-white py-2 px-4 rounded-md hover:bg-orange-700 dark:hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:focus:ring-orange-400 transition-colors shadow-sm"
+                >
+                  <Wrench className="w-4 h-4" />
+                  Start Maintenance
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMaintenanceModal(false);
+                    setMaintenanceVehicle(null);
+                    setError(null);
+                  }}
+                  className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:focus:ring-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Vehicle Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 border border-gray-200 dark:border-gray-700 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Add New Vehicle</h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add New Vehicle</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -324,33 +526,33 @@ export default function FleetTable() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
                 <input
                   type="text"
                   value={addForm.name}
                   onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   placeholder="e.g., Truck-01"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
                 <input
                   type="text"
                   value={addForm.type}
                   onChange={(e) => setAddForm({ ...addForm, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   placeholder="e.g., Heavy Truck"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
                 <select
                   value={addForm.status}
                   onChange={(e) => setAddForm({ ...addForm, status: e.target.value as Vehicle['status'] })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                 >
                   <option value="Idle">Idle</option>
                   <option value="In Transit">In Transit</option>
@@ -359,12 +561,12 @@ export default function FleetTable() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Capacity</label>
                 <input
                   type="number"
                   value={addForm.capacity}
                   onChange={(e) => setAddForm({ ...addForm, capacity: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   placeholder="e.g., 5000"
                 />
               </div>
@@ -378,7 +580,7 @@ export default function FleetTable() {
                 </button>
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
                 >
                   Cancel
                 </button>
@@ -391,12 +593,12 @@ export default function FleetTable() {
       {/* Edit Modal */}
       {editingVehicle && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 border border-gray-200 dark:border-gray-700 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Edit Vehicle</h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Vehicle</h3>
               <button
                 onClick={() => setEditingVehicle(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -404,32 +606,32 @@ export default function FleetTable() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
                 <input
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
                 <input
                   type="text"
                   value={editForm.type}
                   onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
                 <select
                   value={editForm.status}
                   onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Vehicle['status'] })}
                   disabled={editingVehicle?.status === 'In Transit'}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   <option value="In Transit">In Transit</option>
                   <option value="Idle">Idle</option>
@@ -443,12 +645,12 @@ export default function FleetTable() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Capacity</label>
                 <input
                   type="number"
                   value={editForm.capacity}
                   onChange={(e) => setEditForm({ ...editForm, capacity: parseFloat(e.target.value) })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                 />
               </div>
 
@@ -461,7 +663,7 @@ export default function FleetTable() {
                 </button>
                 <button
                   onClick={() => setEditingVehicle(null)}
-                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 py-2 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500"
                 >
                   Cancel
                 </button>

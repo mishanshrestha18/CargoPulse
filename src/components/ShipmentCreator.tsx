@@ -624,7 +624,7 @@ export default function ShipmentCreator() {
             <select
               value={form.origin}
               onChange={(e) => setForm({ ...form, origin: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
             >
               <option value="">Select origin...</option>
               {locations.map(loc => (
@@ -646,8 +646,8 @@ export default function ShipmentCreator() {
               onChange={(e) => setForm({ ...form, destination: e.target.value })}
               className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-gray-900 dark:bg-gray-700 dark:text-gray-100 ${
                 isSameLocation
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                  ? 'border-red-500 focus:ring-red-500 dark:focus:ring-red-400'
+                  : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
               }`}
             >
               <option value="">Select destination...</option>
@@ -701,7 +701,7 @@ export default function ShipmentCreator() {
             <select
               value={form.vehicleId}
               onChange={(e) => setForm({ ...form, vehicleId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
             >
               <option value="">Select {form.shippingMethod}...</option>
               {filteredVehicles.map(vehicle => (
@@ -724,7 +724,7 @@ export default function ShipmentCreator() {
             <select
               value={form.driverId}
               onChange={(e) => setForm({ ...form, driverId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
             >
               <option value="">Select {form.shippingMethod === 'plane' ? 'pilot' : 'driver'}...</option>
               {drivers.map(driver => (
@@ -779,7 +779,7 @@ export default function ShipmentCreator() {
               <select
                 value={newItem.inventoryItemId}
                 onChange={(e) => setNewItem({ ...newItem, inventoryItemId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
                 disabled={!form.origin}
               >
                 <option value="">Select product...</option>
@@ -823,8 +823,8 @@ export default function ShipmentCreator() {
                     className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 text-gray-900 dark:bg-gray-700 dark:text-gray-100 ${
                       newItem.inventoryItemId && newItem.quantity > 0 &&
                       inventory.find(item => String(item.id) === String(newItem.inventoryItemId))?.quantity < newItem.quantity
-                        ? 'border-red-500 dark:border-red-500 focus:ring-red-500'
-                        : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
+                        ? 'border-red-500 dark:border-red-500 focus:ring-red-500 dark:focus:ring-red-400'
+                        : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 dark:focus:ring-blue-400'
                     }`}
                     placeholder="Quantity"
                     disabled={!form.origin}
@@ -874,7 +874,7 @@ export default function ShipmentCreator() {
                     <div key={manifestItem.inventoryItem.id} className={`flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded border ${isQuantityExceeded ? 'border-red-500 dark:border-red-600' : 'border-gray-200 dark:border-gray-600'}`}>
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{manifestItem.inventoryItem.item_name}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 dark:text-gray-400">
                           ${manifestItem.inventoryItem.price_per_unit.toFixed(2)}/unit • Available: {invItem?.quantity || 0}
                           {manifestItem.discountPercent > 0 && (
                             <span className="text-green-600 dark:text-green-400 ml-2">
@@ -922,7 +922,7 @@ export default function ShipmentCreator() {
 
           {/* Clear Form Button */}
           {(manifest.length > 0 || form.origin || form.destination) && (
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700 dark:bg-gray-800">
               <button
                 onClick={handleClearForm}
                 className="w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:text-white hover:bg-red-600 dark:hover:bg-red-700 border border-red-600 dark:border-red-400 rounded-md transition-colors font-medium"
@@ -1052,7 +1052,7 @@ export default function ShipmentCreator() {
           <button
             onClick={handleDispatch}
             disabled={!priceBreakdown || isSameLocation || loading || !form.vehicleId || !form.driverId || manifest.length === 0 || hasQuantityError}
-            className="w-full bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold transition-colors"
+            className="w-full bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-semibold transition-colors"
             title={hasQuantityError ? 'Cannot dispatch - quantities exceed available stock' : ''}
           >
             <Send className="w-5 h-5" />

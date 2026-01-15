@@ -83,3 +83,15 @@ export interface ShipmentItem {
 }
 
 export type ShipmentItemInsert = Omit<ShipmentItem, 'id' | 'created_at'>;
+
+export interface MaintenanceLog {
+  id: string;
+  created_at: string;
+  vehicle_id: string;
+  description: string;
+  cost: number;
+  status: 'In Progress' | 'Completed';
+  completed_at?: string;
+}
+
+export type MaintenanceLogInsert = Omit<MaintenanceLog, 'id' | 'created_at'>;
