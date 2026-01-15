@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, Plane, Package, MapPin, XCircle, Users, Clock, TrendingUp, CheckCircle } from 'lucide-react';
+import { Truck, Plane, Package, MapPin, XCircle, Users, Clock, TrendingUp, CheckCircle, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { showToast } from '@/components/ToastContainer';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface ShipmentItem {
   id: number;
@@ -51,6 +53,7 @@ export default function ActiveShipmentsList() {
   const [error, setError] = useState<string | null>(null);
   const [swappingShipmentId, setSwappingShipmentId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [expandedShipmentId, setExpandedShipmentId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -442,6 +445,122 @@ export default function ActiveShipmentsList() {
     }
   };
 
+  const generateInvoice = (shipment: ActiveShipment) => {
+    try {
+      const doc = new jsPDF();
+
+      // Header
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('CargoPulse Logistics', 105, 20, { align: 'center' });
+
+      doc.setFontSize(16);
+      doc.text('Bill of Lading', 105, 30, { align: 'center' });
+
+      // Shipment Details
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+
+      const currentDate = new Date().toLocaleDateString();
+      const createdDate = new Date(shipment.created_at).toLocaleDateString();
+
+      doc.text(`Shipment ID: ${shipment.id}`, 20, 45);
+      doc.text(`Date Issued: ${currentDate}`, 20, 52);
+      doc.text(`Date Created: ${createdDate}`, 20, 59);
+
+      doc.text(`Origin: ${shipment.locations_origin?.name || 'Unknown'}`, 20, 70);
+      doc.text(`Destination: ${shipment.locations_destination?.name || 'Unknown'}`, 20, 77);
+
+      doc.text(`Vehicle: ${shipment.vehicles?.name || 'Unknown'}`, 20, 88);
+      doc.text(`${shipment.shipping_method === 'plane' ? 'Pilot' : 'Driver'}: ${shipment.drivers?.name || 'Unknown'}`, 20, 95);
+      doc.text(`Shipping Method: ${shipment.shipping_method || 'standard'}`, 20, 102);
+      doc.text(`Urgency: ${shipment.urgency || 'standard'}`, 20, 109);
+
+      // Manifest Table
+      const tableData: any[] = [];
+
+      if (shipment.shipment_items && shipment.shipment_items.length > 0) {
+        // Multi-item shipment
+        shipment.shipment_items.forEach((item) => {
+          tableData.push([
+            item.item_name,
+            item.quantity.toString(),
+            `$${item.price_per_unit?.toFixed(2) || '0.00'}`,
+            `$${item.total_cost?.toFixed(2) || '0.00'}`
+          ]);
+        });
+      } else if (shipment.inventory?.item_name) {
+        // Legacy single-item shipment
+        const pricePerUnit = shipment.inventory?.price_per_unit || 0;
+        const totalCost = shipment.total_cost || (pricePerUnit * shipment.quantity);
+
+        tableData.push([
+          shipment.inventory.item_name,
+          shipment.quantity.toString(),
+          `$${pricePerUnit.toFixed(2)}`,
+          `$${totalCost.toFixed(2)}`
+        ]);
+      }
+
+      autoTable(doc, {
+        startY: 120,
+        head: [['Item Name', 'Quantity', 'Price/Unit', 'Total']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [59, 130, 246], // Blue
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+        },
+        styles: {
+          fontSize: 10,
+        },
+      });
+
+      // Footer
+      const finalY = (doc as any).lastAutoTable.finalY || 150;
+
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Total Cost: $${shipment.total_cost?.toFixed(2) || '0.00'}`, 20, finalY + 15);
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Status: ${shipment.status}`, 20, finalY + 25);
+
+      // Arrival time if available
+      if (shipment.arrival_time) {
+        const arrivalDate = new Date(shipment.arrival_time).toLocaleString();
+        doc.text(`Expected Arrival: ${arrivalDate}`, 20, finalY + 32);
+      }
+
+      // Signature section
+      doc.setFontSize(10);
+      doc.text('_________________________________', 20, finalY + 50);
+      doc.text('Authorized Signature', 20, finalY + 57);
+
+      doc.text('_________________________________', 120, finalY + 50);
+      doc.text('Date', 120, finalY + 57);
+
+      // Save the PDF
+      doc.save(`invoice-${shipment.id}.pdf`);
+
+      // Show success toast
+      showToast(
+        'arrival',
+        'Invoice Generated',
+        `PDF invoice for shipment ${shipment.id} has been downloaded`
+      );
+    } catch (err) {
+      console.error('Error generating invoice:', err);
+      showToast(
+        'cancel',
+        'Error',
+        'Failed to generate invoice PDF'
+      );
+    }
+  };
+
   if (loading && shipments.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
@@ -491,11 +610,13 @@ export default function ActiveShipmentsList() {
             const progress = calculateProgress(shipment.created_at, shipment.arrival_time);
             const timeRemaining = formatTimeRemaining(shipment.arrival_time);
             const isSwapping = swappingShipmentId === shipment.id;
+            const isExpanded = expandedShipmentId === shipment.id;
 
             return (
               <div
                 key={shipment.id}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow"
+                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-lg dark:hover:shadow-gray-900/50 transition-shadow cursor-pointer"
+                onClick={() => setExpandedShipmentId(isExpanded ? null : shipment.id)}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between mb-3">
@@ -580,44 +701,115 @@ export default function ActiveShipmentsList() {
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700 dark:bg-gray-800">
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Shipment ID:</span>
+                        <p className="text-gray-900 dark:text-gray-100 font-medium">{shipment.id}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Created:</span>
+                        <p className="text-gray-900 dark:text-gray-100 font-medium">
+                          {new Date(shipment.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Expected Arrival:</span>
+                        <p className="text-gray-900 dark:text-gray-100 font-medium">
+                          {new Date(shipment.arrival_time).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Total Cost:</span>
+                        <p className="text-gray-900 dark:text-gray-100 font-medium">
+                          ${shipment.total_cost?.toFixed(2) || '0.00'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Manifest Details */}
+                    {shipment.shipment_items && shipment.shipment_items.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Cargo Manifest:</h4>
+                        <div className="space-y-1">
+                          {shipment.shipment_items.map((item, idx) => (
+                            <div key={idx} className="flex justify-between text-sm bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
+                              <span className="text-gray-700 dark:text-gray-300">{item.item_name}</span>
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {item.quantity} units × ${item.price_per_unit?.toFixed(2)} = ${item.total_cost?.toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions - 2 Rows */}
+                <div className="pt-3 border-t border-gray-200 dark:border-gray-700 dark:bg-gray-800">
                   {!isSwapping ? (
-                    <>
-                      <button
-                        onClick={() => handleFinishShipment(shipment)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 dark:hover:bg-green-900/50 text-sm transition-colors"
-                        title="Mark shipment as delivered"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        Finish
-                      </button>
-                      <button
-                        onClick={() => setSwappingShipmentId(shipment.id)}
-                        disabled={idleDrivers.length === 0 || shipment.shipping_method === 'plane'}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 dark:hover:bg-blue-900/50 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={shipment.shipping_method === 'plane' ? 'Cannot swap pilots during flight' : 'Swap driver to another available driver'}
-                      >
-                        <Users className="w-4 h-4" />
-                        Swap Driver
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleCancelShipment(shipment);
-                        }}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50 dark:hover:bg-red-900/50 text-sm transition-colors"
-                      >
-                        <XCircle className="w-4 h-4" />
-                        Cancel
-                      </button>
-                    </>
+                    <div className="flex flex-col gap-2">
+                      {/* First Row */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            generateInvoice(shipment);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-md hover:bg-purple-100 dark:hover:bg-purple-900/50 text-sm transition-colors"
+                          title="Download PDF invoice"
+                        >
+                          <FileText className="w-4 h-4" />
+                          Invoice
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFinishShipment(shipment);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 text-sm transition-colors"
+                          title="Mark shipment as delivered"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Finish
+                        </button>
+                      </div>
+                      {/* Second Row */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSwappingShipmentId(shipment.id);
+                          }}
+                          disabled={idleDrivers.length === 0 || shipment.shipping_method === 'plane'}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={shipment.shipping_method === 'plane' ? 'Cannot swap pilots during flight' : 'Swap driver to another available driver'}
+                        >
+                          <Users className="w-4 h-4" />
+                          Swap Driver
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleCancelShipment(shipment);
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50 text-sm transition-colors"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center gap-2 w-full">
                       <select
                         onChange={(e) => handleSwapDriver(shipment.id, e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
                         className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-700 dark:text-gray-100"
                       >
                         <option value="">Select new driver...</option>
@@ -628,7 +820,10 @@ export default function ActiveShipmentsList() {
                         ))}
                       </select>
                       <button
-                        onClick={() => setSwappingShipmentId(null)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSwappingShipmentId(null);
+                        }}
                         className="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 text-sm"
                       >
                         Cancel

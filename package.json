@@ -13,6 +13,8 @@
     "@turf/great-circle": "^7.3.2",
     "@types/leaflet": "^1.9.21",
     "geolib": "^3.3.4",
+    "jspdf": "^4.0.0",
+    "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",

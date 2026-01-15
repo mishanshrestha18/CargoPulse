@@ -130,6 +130,13 @@ export default function ShipmentCreator() {
     };
   }, []);
 
+  // Reset manifest when origin location changes
+  useEffect(() => {
+    // Clear manifest when origin changes (inventory availability changes)
+    setManifest([]);
+    setNewItem({ inventoryItemId: '', quantity: 1 });
+  }, [form.origin]);
+
   // Auto-detect shipping method based on location names
   useEffect(() => {
     if (!form.origin || !form.destination) {
