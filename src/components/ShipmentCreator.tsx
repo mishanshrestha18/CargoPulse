@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Truck, Plane, MapPin, Package, DollarSign, AlertCircle, Send, Plus, X, List } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Inventory, Location, Vehicle, Driver, ShipmentInsert, ShipmentItemInsert } from '@/types/database';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { showToast } from '@/components/ToastContainer';
 import { getDistance } from 'geolib';
+import WeatherCard from '@/components/WeatherCard';
+import type { WeatherAlert } from '@/lib/weather';
 
 interface ManifestItem {
   inventoryItem: Inventory;
@@ -64,6 +66,17 @@ export default function ShipmentCreator() {
 
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [weatherAlert, setWeatherAlert] = useState<WeatherAlert | null>(null);
+
+  // Memoize weather alert callback to prevent flickering
+  const handleWeatherAlert = useCallback((alert: WeatherAlert) => {
+    setWeatherAlert(alert);
+  }, []);
+
+  // Memoize destination city name to prevent unnecessary re-renders
+  const destinationCityName = useMemo(() => {
+    return locations.find(loc => String(loc.id) === String(form.destination))?.name || '';
+  }, [locations, form.destination]);
 
   // Load form from localStorage on mount
   useEffect(() => {
@@ -419,9 +432,13 @@ export default function ShipmentCreator() {
     try {
       setLoading(true);
 
-      // Calculate arrival time
+      // Calculate arrival time (including weather delay if present)
       const currentTime = new Date();
-      const arrivalTime = new Date(currentTime.getTime() + priceBreakdown.durationSeconds * 1000);
+      const weatherDelaySeconds = (weatherAlert && weatherAlert.hasAlert && weatherAlert.estimatedDelay > 0)
+        ? weatherAlert.estimatedDelay * 3600 // Convert hours to seconds
+        : 0;
+      const totalDurationSeconds = priceBreakdown.durationSeconds + weatherDelaySeconds;
+      const arrivalTime = new Date(currentTime.getTime() + totalDurationSeconds * 1000);
 
       // Step 1: Create shipment record
       const shipmentToInsert: ShipmentInsert = {
@@ -663,6 +680,19 @@ export default function ShipmentCreator() {
               </p>
             )}
           </div>
+
+          {/* Weather Card - Real-Time Weather Integration */}
+          {form.destination && destinationCityName && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Destination Weather
+              </label>
+              <WeatherCard
+                cityName={destinationCityName}
+                onWeatherAlert={handleWeatherAlert}
+              />
+            </div>
+          )}
 
           {/* Shipping Method Display */}
           <div>
@@ -1025,9 +1055,23 @@ export default function ShipmentCreator() {
                 </span>
               </div>
 
-              <div className="flex justify-between items-center text-xs text-gray-600 dark:text-gray-400">
-                <span>Estimated Delivery Time</span>
-                <span>{(priceBreakdown.durationSeconds / 3600).toFixed(1)} hours</span>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-xs text-gray-600 dark:text-gray-400">
+                  <span>Estimated Delivery Time</span>
+                  <span>
+                    {(priceBreakdown.durationSeconds / 3600).toFixed(1)} hours
+                    {weatherAlert && weatherAlert.hasAlert && weatherAlert.estimatedDelay > 0 && (
+                      <span className="text-orange-600 dark:text-orange-400 font-semibold">
+                        {' '}+ {weatherAlert.estimatedDelay}h (Weather Delay)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {weatherAlert && weatherAlert.hasAlert && weatherAlert.estimatedDelay > 0 && (
+                  <div className="text-xs text-orange-700 dark:text-orange-300 font-medium">
+                    Total ETA: {((priceBreakdown.durationSeconds / 3600) + weatherAlert.estimatedDelay).toFixed(1)} hours
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-between items-center pt-2">
