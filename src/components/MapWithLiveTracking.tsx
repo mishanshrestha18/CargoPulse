@@ -5,7 +5,9 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import { supabase } from '@/lib/supabase';
 import type { Location } from '@/types/database';
 import L from 'leaflet';
-import { Truck, MapPin, Clock, Package } from 'lucide-react';
+import { Truck, Plane, MapPin, Clock, Package } from 'lucide-react';
+import greatCircle from '@turf/great-circle';
+import { point } from '@turf/helpers';
 
 interface ActiveShipment {
   id: string;
@@ -13,6 +15,7 @@ interface ActiveShipment {
   vehicle_id: string;
   origin: string;
   destination: string;
+  shipping_method: string;
   created_at: string;
   arrival_time: string;
   status: string;
@@ -82,8 +85,53 @@ const createTruckIcon = (color: string) => {
   });
 };
 
+// Create custom airplane icon
+const createAirplaneIcon = (color: string) => {
+  return L.divIcon({
+    className: 'custom-airplane-marker',
+    html: `
+      <div style="
+        position: relative;
+        width: 40px;
+        height: 40px;
+      ">
+        <div style="
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: ${color};
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          border: 3px solid white;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          animation: pulse 2s ease-in-out infinite;
+        ">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+          </svg>
+        </div>
+        <style>
+          @keyframes pulse {
+            0%, 100% { box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+            50% { box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 20px ${color}80; }
+          }
+        </style>
+      </div>
+    `,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+  });
+};
+
 const truckIcon = createTruckIcon('#2563eb'); // Blue truck
 const expressIconTruck = createTruckIcon('#ea580c'); // Orange for express
+const airplaneIcon = createAirplaneIcon('#3b82f6'); // Blue airplane
+const expressIconAirplane = createAirplaneIcon('#ea580c'); // Orange for express
 
 // Origin/Destination markers
 const createLocationIcon = (color: string, label: string) => {
@@ -260,20 +308,38 @@ export default function MapWithLiveTracking() {
             return null;
           }
 
-          // Fetch route from OSRM
+          // Determine route geometry based on shipping method
+          let routeGeometry: [number, number][];
+
           try {
-            const url = `https://router.project-osrm.org/route/v1/driving/${originLoc.longitude},${originLoc.latitude};${destLoc.longitude},${destLoc.latitude}?overview=full&geometries=geojson`;
-            const response = await fetch(url);
-            const data = await response.json();
+            if (shipment.shipping_method === 'plane') {
+              // Use geodesic (great circle) path for airplanes
+              const start = point([originLoc.longitude, originLoc.latitude]);
+              const end = point([destLoc.longitude, destLoc.latitude]);
+              const arc = greatCircle(start, end, { npoints: 100 });
 
-            if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
-              return null;
+              routeGeometry = arc.geometry.coordinates.map(
+                (coord: [number, number]) => [coord[1], coord[0]] as [number, number] // [lon, lat] to [lat, lon]
+              );
+            } else {
+              // Use OSRM road routing for ground vehicles
+              const url = `https://router.project-osrm.org/route/v1/driving/${originLoc.longitude},${originLoc.latitude};${destLoc.longitude},${destLoc.latitude}?overview=full&geometries=geojson`;
+              const response = await fetch(url);
+              const data = await response.json();
+
+              if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+                // Fallback to straight line if routing fails
+                routeGeometry = [
+                  [originLoc.latitude, originLoc.longitude],
+                  [destLoc.latitude, destLoc.longitude]
+                ];
+              } else {
+                const route = data.routes[0];
+                routeGeometry = route.geometry.coordinates.map(
+                  (coord: [number, number]) => [coord[1], coord[0]] as [number, number] // [lon, lat] to [lat, lon]
+                );
+              }
             }
-
-            const route = data.routes[0];
-            const routeGeometry: [number, number][] = route.geometry.coordinates.map(
-              (coord: [number, number]) => [coord[1], coord[0]] // GeoJSON [lon, lat] to Leaflet [lat, lon]
-            );
 
             // Calculate current position
             const { position, progress } = calculateCurrentPosition(
@@ -388,13 +454,21 @@ export default function MapWithLiveTracking() {
           {/* Render active shipments */}
           {shipments.map((shipment) => (
             <div key={shipment.id}>
-              {/* Route polyline */}
+              {/* Route polyline (different styles for planes vs trucks) */}
               <Polyline
                 positions={shipment.routeGeometry}
-                color={shipment.urgency === 'express' ? '#ea580c' : '#3b82f6'}
-                weight={4}
+                color={
+                  shipment.shipping_method === 'plane'
+                    ? '#3b82f6' // Blue for airplanes
+                    : (shipment.urgency === 'express' ? '#ea580c' : '#f59e0b') // Orange/amber for trucks
+                }
+                weight={shipment.shipping_method === 'plane' ? 3 : 4}
                 opacity={0.7}
-                dashArray={shipment.urgency === 'express' ? '10, 5' : undefined}
+                dashArray={
+                  shipment.shipping_method === 'plane'
+                    ? '10, 10' // Dashed for airplanes
+                    : (shipment.urgency === 'express' ? '10, 5' : undefined) // Express trucks dashed
+                }
               />
 
               {/* Origin marker */}
@@ -421,20 +495,28 @@ export default function MapWithLiveTracking() {
                 </Popup>
               </Marker>
 
-              {/* Moving truck marker */}
+              {/* Moving vehicle marker (truck or airplane) */}
               <Marker
                 position={shipment.currentPosition}
-                icon={shipment.urgency === 'express' ? expressIconTruck : truckIcon}
+                icon={
+                  shipment.shipping_method === 'plane'
+                    ? (shipment.urgency === 'express' ? expressIconAirplane : airplaneIcon)
+                    : (shipment.urgency === 'express' ? expressIconTruck : truckIcon)
+                }
               >
                 <Popup>
                   <div className="text-sm min-w-[200px]">
                     <div className="flex items-center gap-2 mb-2">
-                      <Truck className="w-4 h-4 text-blue-600" />
+                      {shipment.shipping_method === 'plane' ? (
+                        <Plane className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <Truck className="w-4 h-4 text-blue-600" />
+                      )}
                       <h3 className="font-bold text-gray-900">{shipment.vehicles?.name}</h3>
                     </div>
 
                     <div className="space-y-1 text-xs text-gray-700">
-                      <p><span className="font-medium">Driver:</span> {shipment.drivers?.name}</p>
+                      <p><span className="font-medium">{shipment.shipping_method === 'plane' ? 'Pilot' : 'Driver'}:</span> {shipment.drivers?.name}</p>
                       <div className="flex items-center gap-1">
                         <Package className="w-3 h-3" />
                         <span>{shipment.quantity}x {shipment.inventory?.item_name}</span>

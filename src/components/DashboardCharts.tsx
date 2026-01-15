@@ -454,12 +454,13 @@ export default function DashboardCharts() {
                 <BarChart
                   data={driverPerformance}
                   layout="horizontal"
-                  margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
                   <XAxis
                     type="number"
                     stroke="#6b7280"
+                    className="dark:stroke-gray-400"
                     style={{ fontSize: '14px' }}
                     tickFormatter={(value) => `$${(value / 1000).toFixed(1)}k`}
                   />
@@ -467,8 +468,9 @@ export default function DashboardCharts() {
                     type="category"
                     dataKey="name"
                     stroke="#6b7280"
+                    className="dark:stroke-gray-400"
                     style={{ fontSize: '14px' }}
-                    width={90}
+                    width={110}
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => {

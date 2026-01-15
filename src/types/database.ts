@@ -59,9 +59,9 @@ export interface Shipment {
   vehicle_id: string;
   origin: string;
   destination: string;
-  inventory_item_id: string;
-  item_name: string; // Store item name for destination inventory creation
-  quantity: number;
+  inventory_item_id?: string; // Optional for backward compatibility
+  item_name?: string; // Optional for backward compatibility
+  quantity?: number; // Optional for backward compatibility
   arrival_time: string;
   status: 'In Transit' | 'Delivered' | 'Cancelled';
   urgency: 'standard' | 'express';
@@ -70,3 +70,16 @@ export interface Shipment {
 }
 
 export type ShipmentInsert = Omit<Shipment, 'id' | 'created_at'>;
+
+export interface ShipmentItem {
+  id: number;
+  created_at: string;
+  shipment_id: number;
+  inventory_item_id: number;
+  item_name: string;
+  quantity: number;
+  price_per_unit: number;
+  total_cost: number;
+}
+
+export type ShipmentItemInsert = Omit<ShipmentItem, 'id' | 'created_at'>;

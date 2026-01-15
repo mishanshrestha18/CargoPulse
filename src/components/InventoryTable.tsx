@@ -81,10 +81,10 @@ export default function InventoryTable() {
       item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sku.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Filter by Status
+    // Filter by Status (using same logic as calculateStatus)
     let matchesStatus = true;
     if (filterStatus === 'In Stock') {
-      matchesStatus = item.quantity >= 20;
+      matchesStatus = item.quantity >= 10;
     } else if (filterStatus === 'Low Stock') {
       matchesStatus = item.quantity > 0 && item.quantity < 20;
     } else if (filterStatus === 'Out of Stock') {
@@ -339,9 +339,11 @@ export default function InventoryTable() {
             </thead>
             <tbody>
               {filteredInventory.map((item) => {
+                // Calculate status dynamically based on current quantity
+                const currentStatus = calculateStatus(item.quantity);
                 const statusColor =
-                  item.status === 'Out of Stock' ? 'text-red-600 bg-red-50' :
-                  item.status === 'Low Stock' ? 'text-yellow-600 bg-yellow-50' :
+                  currentStatus === 'Out of Stock' ? 'text-red-600 bg-red-50' :
+                  currentStatus === 'Low Stock' ? 'text-yellow-600 bg-yellow-50' :
                   'text-green-600 bg-green-50';
 
                 return (
@@ -363,7 +365,7 @@ export default function InventoryTable() {
                     <td className="py-3 px-4 text-gray-900">{item.max_discount || 0}%</td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
-                        {item.status}
+                        {currentStatus}
                       </span>
                     </td>
                     <td className="py-3 px-4">

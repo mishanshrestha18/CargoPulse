@@ -1,10 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Truck, Package, MapPin, XCircle, Users, Clock, TrendingUp, CheckCircle } from 'lucide-react';
+import { Truck, Plane, Package, MapPin, XCircle, Users, Clock, TrendingUp, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { showToast } from '@/components/ToastContainer';
+
+interface ShipmentItem {
+  id: number;
+  item_name: string;
+  quantity: number;
+  price_per_unit: number;
+  total_cost: number;
+}
 
 interface ActiveShipment {
   id: string;
@@ -19,12 +27,14 @@ interface ActiveShipment {
   created_at: string;
   status: string;
   urgency: string;
+  shipping_method: string;
   total_cost: number;
   drivers: { name: string };
   vehicles: { name: string };
   locations_origin: { name: string };
   locations_destination: { name: string };
   inventory: { item_name: string; price_per_unit?: number; sku?: string };
+  shipment_items?: ShipmentItem[];  // For multi-item shipments
 }
 
 interface Driver {
@@ -70,6 +80,23 @@ export default function ActiveShipmentsList() {
       const locationsMap = new Map(locationsRes.data?.map(l => [String(l.id), l]) || []);
       const inventoryMap = new Map(inventoryRes.data?.map(i => [String(i.id), i]) || []);
 
+      // Fetch shipment_items for each shipment
+      const shipmentIds = shipmentsData?.map(s => s.id) || [];
+      const { data: allShipmentItems } = await supabase
+        .from('shipment_items')
+        .select('*')
+        .in('shipment_id', shipmentIds);
+
+      // Create a map of shipment_id -> items[]
+      const shipmentItemsMap = new Map<string, ShipmentItem[]>();
+      (allShipmentItems || []).forEach(item => {
+        const shipmentId = String(item.shipment_id);
+        if (!shipmentItemsMap.has(shipmentId)) {
+          shipmentItemsMap.set(shipmentId, []);
+        }
+        shipmentItemsMap.get(shipmentId)!.push(item);
+      });
+
       // Map the data manually
       const mappedShipments = (shipmentsData || []).map((shipment: any) => ({
         ...shipment,
@@ -78,6 +105,7 @@ export default function ActiveShipmentsList() {
         locations_origin: locationsMap.get(String(shipment.origin)) || { name: 'Unknown' },
         locations_destination: locationsMap.get(String(shipment.destination)) || { name: 'Unknown' },
         inventory: inventoryMap.get(String(shipment.inventory_item_id)) || { item_name: 'Unknown' },
+        shipment_items: shipmentItemsMap.get(String(shipment.id)) || [],
       }));
 
       setShipments(mappedShipments);
@@ -309,62 +337,103 @@ export default function ActiveShipmentsList() {
 
       if (vehicleError) throw vehicleError;
 
-      // === INVENTORY TRANSFER LOGIC ===
-      const itemNameToTransfer = shipment.item_name || shipment.inventory?.item_name;
+      // === MULTI-ITEM INVENTORY TRANSFER LOGIC ===
       const destinationName = shipment.locations_destination?.name;
 
-      if (itemNameToTransfer && destinationName) {
-        try {
-          // Check if item exists at destination
-          const { data: existingInventory, error: checkError } = await supabase
-            .from('inventory')
-            .select('*')
-            .eq('location', destinationName)
-            .eq('item_name', itemNameToTransfer)
-            .maybeSingle();
+      if (!destinationName) {
+        console.error('No destination name for shipment');
+        return;
+      }
 
-          if (!checkError) {
+      // Fetch all shipment_items for this shipment
+      const { data: shipmentItems, error: itemsError } = await supabase
+        .from('shipment_items')
+        .select('*')
+        .eq('shipment_id', shipment.id);
+
+      if (itemsError) {
+        console.error('Error fetching shipment items:', itemsError);
+      }
+
+      let totalItems = 0;
+      const processedItems: string[] = [];
+
+      // Process each item in the manifest
+      if (shipmentItems && shipmentItems.length > 0) {
+        for (const item of shipmentItems) {
+          try {
+            // Check if item exists at destination
+            const { data: existingInventory, error: checkError } = await supabase
+              .from('inventory')
+              .select('*')
+              .eq('location', destinationName)
+              .eq('item_name', item.item_name)
+              .maybeSingle();
+
+            if (checkError) {
+              console.error(`Error checking inventory for ${item.item_name}:`, checkError);
+              continue;
+            }
+
             if (existingInventory) {
               // UPDATE: Item exists, increment quantity
+              const newQuantity = existingInventory.quantity + item.quantity;
               await supabase
                 .from('inventory')
                 .update({
-                  quantity: existingInventory.quantity + shipment.quantity
+                  quantity: newQuantity,
+                  status: newQuantity > 0 ? 'In Stock' : 'Out of Stock'
                 })
                 .eq('id', existingInventory.id);
-              console.log(`✅ Updated inventory at ${destinationName}: ${itemNameToTransfer} +${shipment.quantity}`);
+              console.log(`✅ Updated ${destinationName}: ${item.item_name} +${item.quantity} (now ${newQuantity})`);
+              totalItems += item.quantity;
+              processedItems.push(`${item.quantity}x ${item.item_name}`);
             } else {
               // INSERT: Create new inventory item
+              // Get original inventory details for price/sku
+              const { data: originalInventory } = await supabase
+                .from('inventory')
+                .select('price_per_unit, sku')
+                .eq('id', item.inventory_item_id)
+                .single();
+
               await supabase
                 .from('inventory')
                 .insert({
-                  item_name: itemNameToTransfer,
-                  quantity: shipment.quantity,
+                  item_name: item.item_name,
+                  quantity: item.quantity,
                   location: destinationName,
                   status: 'In Stock',
-                  price_per_unit: shipment.inventory?.price_per_unit || 0,
-                  sku: shipment.inventory?.sku || `SKU-${Date.now()}`,
+                  price_per_unit: originalInventory?.price_per_unit || item.price_per_unit || 0,
+                  sku: originalInventory?.sku || `SKU-${Date.now()}`,
                 });
-              console.log(`✅ Created new inventory at ${destinationName}: ${itemNameToTransfer}`);
+              console.log(`✅ Created ${destinationName}: ${item.item_name} (${item.quantity} units)`);
+              totalItems += item.quantity;
+              processedItems.push(`${item.quantity}x ${item.item_name}`);
             }
+          } catch (itemErr) {
+            console.error(`Error processing item ${item.item_name}:`, itemErr);
           }
-        } catch (inventoryErr) {
-          console.error('Error during inventory transfer:', inventoryErr);
         }
       }
+
+      // Create summary message
+      const itemsSummary = processedItems.length === 1
+        ? processedItems[0]
+        : `${processedItems.length} items (${totalItems} total units)`;
 
       // Add notification to sidebar
       addNotification(
         'arrival',
         'Shipment Arrived',
-        `${shipment.quantity}x ${shipment.inventory?.item_name} arrived at ${shipment.locations_destination?.name}. ${shipment.drivers?.name} is now available.`
+        `${itemsSummary} arrived at ${destinationName}. ${shipment.drivers?.name} is now available.`
       );
 
       // Show toast notification
       showToast(
         'arrival',
         'Shipment Delivered!',
-        `${shipment.drivers?.name} delivered ${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name}`
+        `${shipment.drivers?.name} delivered ${itemsSummary} to ${destinationName}`
       );
 
       await fetchData();
@@ -432,14 +501,18 @@ export default function ActiveShipmentsList() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
-                      <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      {shipment.shipping_method === 'plane' ? (
+                        <Plane className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      ) : (
+                        <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      )}
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                         {shipment.vehicles?.name || 'Unknown Vehicle'}
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Driver: {shipment.drivers?.name || 'Unknown'}
+                        {shipment.shipping_method === 'plane' ? 'Pilot' : 'Driver'}: {shipment.drivers?.name || 'Unknown'}
                       </p>
                     </div>
                   </div>
@@ -471,7 +544,19 @@ export default function ActiveShipmentsList() {
                 <div className="flex items-center gap-2 mb-3 text-sm">
                   <Package className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                   <span className="text-gray-700 dark:text-gray-300">
-                    {shipment.quantity}x {shipment.inventory?.item_name || 'Unknown Item'}
+                    {shipment.shipment_items && shipment.shipment_items.length > 0 ? (
+                      shipment.shipment_items.length === 1 ? (
+                        `${shipment.shipment_items[0].quantity}x ${shipment.shipment_items[0].item_name}`
+                      ) : (
+                        `${shipment.shipment_items.length} items (${shipment.shipment_items.reduce((sum, item) => sum + item.quantity, 0)} units)`
+                      )
+                    ) : (
+                      shipment.quantity && shipment.inventory?.item_name ? (
+                        `${shipment.quantity}x ${shipment.inventory.item_name}`
+                      ) : (
+                        'No items'
+                      )
+                    )}
                   </span>
                 </div>
 
@@ -509,8 +594,9 @@ export default function ActiveShipmentsList() {
                       </button>
                       <button
                         onClick={() => setSwappingShipmentId(shipment.id)}
-                        disabled={idleDrivers.length === 0}
+                        disabled={idleDrivers.length === 0 || shipment.shipping_method === 'plane'}
                         className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={shipment.shipping_method === 'plane' ? 'Cannot swap pilots during flight' : 'Swap driver to another available driver'}
                       >
                         <Users className="w-4 h-4" />
                         Swap Driver

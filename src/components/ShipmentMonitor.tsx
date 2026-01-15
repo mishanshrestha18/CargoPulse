@@ -6,23 +6,20 @@ import { useNotifications } from '@/contexts/NotificationContext';
 import { showToast } from '@/components/ToastContainer';
 
 /**
- * ShipmentMonitor - Background component that monitors shipments in transit
+ * ShipmentMonitor - Background component that monitors multi-item shipments
  *
- * This component runs silently in the background and checks every 30 seconds
- * for shipments that have completed their journey (arrival_time <= NOW()).
- *
- * When a shipment is completed, it:
- * 1. Updates the shipment status to 'Delivered'
- * 2. Sets the vehicle status back to 'Idle'
- * 3. Sets the driver status back to 'Idle'
- * 4. Shows a browser notification
+ * When a shipment arrives:
+ * 1. Fetches the shipment
+ * 2. Fetches all shipment_items for that shipment
+ * 3. For each item: Upserts inventory at destination
+ * 4. Updates shipment, vehicle, and driver status
+ * 5. Shows notifications
  */
 export default function ShipmentMonitor() {
   const { addNotification } = useNotifications();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // Function to check for completed shipments
     const checkCompletedShipments = async () => {
       try {
         // Query for shipments that are In Transit and past their arrival time
@@ -33,19 +30,9 @@ export default function ShipmentMonitor() {
             driver_id,
             vehicle_id,
             arrival_time,
-            quantity,
-            inventory_item_id,
-            item_name,
             destination,
-            origin,
             drivers (
               name
-            ),
-            inventory (
-              item_name,
-              price_per_unit,
-              sku,
-              status
             ),
             locations_destination:locations!shipments_destination_fkey (
               name
@@ -65,6 +52,102 @@ export default function ShipmentMonitor() {
 
           for (const shipment of completedShipments) {
             try {
+              // Fetch all shipment_items for this shipment
+              const { data: shipmentItems, error: itemsError } = await supabase
+                .from('shipment_items')
+                .select('*')
+                .eq('shipment_id', shipment.id);
+
+              if (itemsError) {
+                console.error(`Error fetching shipment items for ${shipment.id}:`, itemsError);
+                continue;
+              }
+
+              console.log(`Processing ${shipmentItems?.length || 0} items for shipment ${shipment.id}`);
+
+              // Get destination name
+              const locationData = shipment.locations_destination as any;
+              const destinationName = locationData?.name;
+
+              if (!destinationName) {
+                console.error(`No destination name for shipment ${shipment.id}`);
+                continue;
+              }
+
+              // === INVENTORY TRANSFER LOGIC ===
+              // Loop through each item and upsert at destination
+              let totalItems = 0;
+              const processedItems: string[] = [];
+
+              if (shipmentItems && shipmentItems.length > 0) {
+                for (const item of shipmentItems) {
+                  try {
+                    // Step A: Check if item exists at destination
+                    const { data: existingInventory, error: checkError } = await supabase
+                      .from('inventory')
+                      .select('*')
+                      .eq('location', destinationName)
+                      .eq('item_name', item.item_name)
+                      .maybeSingle();
+
+                    if (checkError) {
+                      console.error(`Error checking destination inventory for ${item.item_name}:`, checkError);
+                      continue;
+                    }
+
+                    // Step B: Upsert logic
+                    if (existingInventory) {
+                      // UPDATE: Item exists at destination, increment quantity
+                      const newQuantity = existingInventory.quantity + item.quantity;
+                      const { error: updateError } = await supabase
+                        .from('inventory')
+                        .update({
+                          quantity: newQuantity,
+                          status: newQuantity > 0 ? 'In Stock' : 'Out of Stock'
+                        })
+                        .eq('id', existingInventory.id);
+
+                      if (updateError) {
+                        console.error(`Error updating inventory for ${item.item_name}:`, updateError);
+                      } else {
+                        console.log(`✅ Updated ${destinationName}: ${item.item_name} +${item.quantity} (now ${newQuantity})`);
+                        totalItems += item.quantity;
+                        processedItems.push(`${item.quantity}x ${item.item_name}`);
+                      }
+                    } else {
+                      // INSERT: Item doesn't exist at destination, create new inventory row
+                      // Get original inventory details for price/sku
+                      const { data: originalInventory } = await supabase
+                        .from('inventory')
+                        .select('price_per_unit, sku')
+                        .eq('id', item.inventory_item_id)
+                        .single();
+
+                      const { error: insertError } = await supabase
+                        .from('inventory')
+                        .insert({
+                          item_name: item.item_name,
+                          quantity: item.quantity,
+                          location: destinationName,
+                          status: 'In Stock',
+                          price_per_unit: originalInventory?.price_per_unit || item.price_per_unit || 0,
+                          sku: originalInventory?.sku || `SKU-${Date.now()}`,
+                        });
+
+                      if (insertError) {
+                        console.error(`Error inserting inventory for ${item.item_name}:`, insertError);
+                      } else {
+                        console.log(`✅ Created ${destinationName}: ${item.item_name} (${item.quantity} units)`);
+                        totalItems += item.quantity;
+                        processedItems.push(`${item.quantity}x ${item.item_name}`);
+                      }
+                    }
+                  } catch (itemErr) {
+                    console.error(`Error processing item ${item.item_name}:`, itemErr);
+                  }
+                }
+              }
+
               // Update shipment status to Delivered
               const { error: shipmentError } = await supabase
                 .from('shipments')
@@ -89,96 +172,39 @@ export default function ShipmentMonitor() {
 
               if (driverError) throw driverError;
 
-              // === INVENTORY TRANSFER LOGIC ===
-              // Move stock from origin to destination
-              const originInventoryData = shipment.inventory as any;
-              const itemNameToTransfer = shipment.item_name || originInventoryData?.item_name;
-              const locationData = shipment.locations_destination as any;
-              const destinationName = locationData?.name || 'destination';
-
-              if (itemNameToTransfer && destinationName) {
-                try {
-                  // Step A: Check if item exists at destination (using location NAME, not ID)
-                  const { data: existingInventory, error: checkError } = await supabase
-                    .from('inventory')
-                    .select('*')
-                    .eq('location', destinationName)
-                    .eq('item_name', itemNameToTransfer)
-                    .maybeSingle();
-
-                  if (checkError) {
-                    console.error('Error checking destination inventory:', checkError);
-                  } else {
-                    // Step B: Upsert logic
-                    if (existingInventory) {
-                      // UPDATE: Item exists at destination, increment quantity
-                      const { error: updateError } = await supabase
-                        .from('inventory')
-                        .update({
-                          quantity: existingInventory.quantity + shipment.quantity
-                        })
-                        .eq('id', existingInventory.id);
-
-                      if (updateError) {
-                        console.error('Error updating destination inventory:', updateError);
-                      } else {
-                        console.log(`✅ Updated inventory at ${destinationName}: ${itemNameToTransfer} +${shipment.quantity} units (now ${existingInventory.quantity + shipment.quantity})`);
-                      }
-                    } else {
-                      // INSERT: Item doesn't exist at destination, create new inventory row
-                      const { error: insertError } = await supabase
-                        .from('inventory')
-                        .insert({
-                          item_name: itemNameToTransfer,
-                          quantity: shipment.quantity,
-                          location: destinationName,
-                          status: 'In Stock',
-                          price_per_unit: originInventoryData?.price_per_unit || 0,
-                          sku: originInventoryData?.sku || `SKU-${Date.now()}`,
-                        });
-
-                      if (insertError) {
-                        console.error('Error inserting destination inventory:', insertError);
-                      } else {
-                        console.log(`✅ Created new inventory at ${destinationName}: ${itemNameToTransfer} (${shipment.quantity} units)`);
-                      }
-                    }
-                  }
-                } catch (inventoryErr) {
-                  console.error('Error during inventory transfer:', inventoryErr);
-                }
-              }
-
-              // Get shipment details for notification
+              // Get driver name for notifications
               const driverData = shipment.drivers as any;
               const driverName = driverData?.name || 'Unknown Driver';
-              const itemName = shipment.item_name || originInventoryData?.item_name || 'Unknown Item';
-              // destinationName already declared above for inventory transfer
+
+              // Create summary message
+              const itemsSummary = processedItems.length === 1
+                ? processedItems[0]
+                : `${processedItems.length} items (${totalItems} total units)`;
 
               // Add notification to sidebar
               addNotification(
                 'arrival',
                 'Shipment Arrived',
-                `${shipment.quantity}x ${itemName} arrived at ${destinationName}. ${driverName} is now available.`
+                `${itemsSummary} arrived at ${destinationName}. ${driverName} is now available.`
               );
 
               // Show toast notification
               showToast(
                 'arrival',
-                'Shipment Arrived!',
-                `${driverName} delivered ${shipment.quantity}x ${itemName} to ${destinationName}`
+                'Shipment Delivered!',
+                `${driverName} delivered ${itemsSummary} to ${destinationName}`
               );
 
               // Show browser notification
               if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification('Shipment Arrived!', {
-                  body: `${driverName} delivered ${shipment.quantity}x ${itemName} to ${destinationName}`,
+                  body: `${driverName} delivered ${itemsSummary} to ${destinationName}`,
                   icon: '/favicon.ico',
                   tag: `shipment-${shipment.id}`,
                 });
               }
 
-              console.log(`Shipment arrived! ${driverName} delivered ${shipment.quantity}x ${itemName} to ${destinationName}`);
+              console.log(`✅ Shipment ${shipment.id} completed: ${itemsSummary} delivered to ${destinationName}`);
             } catch (err) {
               console.error(`Error processing shipment ${shipment.id}:`, err);
             }
@@ -206,7 +232,7 @@ export default function ShipmentMonitor() {
         clearInterval(intervalRef.current);
       }
     };
-  }, []);
+  }, [addNotification]);
 
   // This component doesn't render anything visible
   return null;
