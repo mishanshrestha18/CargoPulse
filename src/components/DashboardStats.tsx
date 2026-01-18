@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { MapPin, Truck, AlertTriangle, RefreshCw, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -11,7 +11,11 @@ interface Stats {
   completedShipments: number;
 }
 
-export default function DashboardStats() {
+interface DashboardStatsProps {
+  refreshTrigger?: number;
+}
+
+export default function DashboardStats({ refreshTrigger }: DashboardStatsProps) {
   const [stats, setStats] = useState<Stats>({
     totalLocations: 0,
     activeFleet: 0,
@@ -21,7 +25,7 @@ export default function DashboardStats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -64,15 +68,26 @@ export default function DashboardStats() {
         completedShipments: completedShipmentsCount || 0,
       });
     } catch (err) {
+      console.error('Error fetching stats:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch statistics');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Initial fetch on mount
   useEffect(() => {
     fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Refetch when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      fetchStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
 
   if (error) {
     return (
@@ -84,17 +99,7 @@ export default function DashboardStats() {
 
   return (
     <div className="mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Dashboard Overview</h2>
-        <button
-          onClick={fetchStats}
-          disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
+      <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">Dashboard Overview</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Locations Card */}

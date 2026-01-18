@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   DollarSign,
@@ -80,7 +80,7 @@ export default function AnalyticsPage() {
   const [fleetStatusData, setFleetStatusData] = useState<FleetStatusData[]>([]);
   const [driverPerformanceData, setDriverPerformanceData] = useState<DriverPerformance[]>([]);
 
-  const fetchAnalyticsData = async () => {
+  const fetchAnalyticsData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -212,7 +212,7 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAnalyticsData();
@@ -220,7 +220,7 @@ export default function AnalyticsPage() {
     // Refresh data every 30 seconds
     const interval = setInterval(fetchAnalyticsData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchAnalyticsData]);
 
   if (loading) {
     return (

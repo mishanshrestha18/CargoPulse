@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { RefreshCw } from 'lucide-react';
 import AddLocationForm from './components/AddLocationForm';
 import DashboardStats from '@/components/DashboardStats';
 import DashboardCharts from '@/components/DashboardCharts';
@@ -17,19 +19,34 @@ const MapWithLiveTracking = dynamic(() => import('@/components/MapWithLiveTracki
 });
 
 export default function Home() {
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleRefreshAll = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
   return (
     <div className="p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-gray-100">Logistics Dashboard</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Logistics Dashboard</h1>
+        <button
+          onClick={handleRefreshAll}
+          className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-md"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh Dashboard
+        </button>
+      </div>
 
       {/* Dashboard Statistics */}
-      <DashboardStats />
+      <DashboardStats refreshTrigger={refreshTrigger} />
 
       {/* Dashboard Charts */}
-      <DashboardCharts />
+      <DashboardCharts refreshTrigger={refreshTrigger} />
 
       {/* Shipment Creator - Smart Order Dispatch */}
       <div className="mb-8">
-        <ShipmentCreator />
+        <ShipmentCreator refreshTrigger={refreshTrigger} onDispatchSuccess={handleRefreshAll} />
       </div>
 
       {/* Live Tracking Section - Active Shipments + Moving Trucks Map */}
@@ -38,7 +55,7 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Active Shipments List (1/3 width) */}
           <div className="lg:col-span-1">
-            <ActiveShipmentsList />
+            <ActiveShipmentsList refreshTrigger={refreshTrigger} onShipmentChange={handleRefreshAll} />
           </div>
 
           {/* Right: Live Tracking Map (2/3 width) */}

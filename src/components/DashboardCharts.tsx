@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   PieChart,
   Pie,
@@ -20,6 +20,7 @@ import {
 import { RefreshCw, TrendingUp, Award } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Vehicle, Inventory } from '@/types/database';
+import BreathingLoader from '@/components/BreathingLoader';
 
 interface FleetStatusData {
   name: string;
@@ -71,7 +72,11 @@ const CurrencyTooltip = ({ active, payload }: any) => {
   return null;
 };
 
-export default function DashboardCharts() {
+interface DashboardChartsProps {
+  refreshTrigger?: number;
+}
+
+export default function DashboardCharts({ refreshTrigger }: DashboardChartsProps) {
   const [fleetData, setFleetData] = useState<FleetStatusData[]>([]);
   const [airplaneData, setAirplaneData] = useState<FleetStatusData[]>([]);
   const [inventoryData, setInventoryData] = useState<InventoryData[]>([]);
@@ -80,7 +85,7 @@ export default function DashboardCharts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -208,15 +213,25 @@ export default function DashboardCharts() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Initial fetch on mount with auto-refresh
   useEffect(() => {
     fetchData();
 
     // Auto-refresh every 30 seconds for real-time updates
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Refetch when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      fetchData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger]);
 
   if (error) {
     return (
@@ -228,17 +243,7 @@ export default function DashboardCharts() {
 
   return (
     <div className="mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Analytics</h2>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
+      <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-4">Analytics</h2>
 
       {/* First Row - Fleet & Airplane Status */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -247,7 +252,7 @@ export default function DashboardCharts() {
           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Fleet Status (Trucks)</h3>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <BreathingLoader size="md" />
             </div>
           ) : fleetData.every(d => d.value === 0) ? (
             <div className="h-80 flex items-center justify-center">
@@ -287,7 +292,7 @@ export default function DashboardCharts() {
           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Airplane Status</h3>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <BreathingLoader size="md" />
             </div>
           ) : airplaneData.every(d => d.value === 0) ? (
             <div className="h-80 flex items-center justify-center">
@@ -327,7 +332,7 @@ export default function DashboardCharts() {
           <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Top 5 Inventory Items</h3>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <BreathingLoader size="md" />
             </div>
           ) : inventoryData.length === 0 ? (
             <div className="h-80 flex items-center justify-center">
@@ -380,7 +385,7 @@ export default function DashboardCharts() {
           </div>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <BreathingLoader size="md" />
             </div>
           ) : revenueData.length === 0 || revenueData.every(d => d.revenue === 0) ? (
             <div className="h-80 flex items-center justify-center">
@@ -442,7 +447,7 @@ export default function DashboardCharts() {
           </div>
           {loading ? (
             <div className="h-80 flex items-center justify-center">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <BreathingLoader size="md" />
             </div>
           ) : driverPerformance.length === 0 ? (
             <div className="h-80 flex items-center justify-center">

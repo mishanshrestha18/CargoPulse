@@ -77,12 +77,28 @@ export interface ShipmentItem {
   shipment_id: number;
   inventory_item_id: number;
   item_name: string;
+  delivery_location_id?: number; // NEW: Individual delivery location for each item
   quantity: number;
   price_per_unit: number;
   total_cost: number;
 }
 
 export type ShipmentItemInsert = Omit<ShipmentItem, 'id' | 'created_at'>;
+
+export interface ShipmentStop {
+  id: number;
+  created_at: string;
+  shipment_id: number;
+  location_id: number;
+  stop_order: number;
+  arrival_time?: string;
+  departure_time?: string;
+  notes?: string;
+  // Joined from locations table
+  location?: Location;
+}
+
+export type ShipmentStopInsert = Omit<ShipmentStop, 'id' | 'created_at' | 'location'>;
 
 export interface MaintenanceLog {
   id: string;

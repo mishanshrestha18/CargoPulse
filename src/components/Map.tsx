@@ -30,6 +30,7 @@ interface RouteData {
 interface RoutePlan {
   origin: SearchablePoint;
   destination: SearchablePoint;
+  stops?: SearchablePoint[]; // Optional intermediate stops
   route: RouteData;
 }
 
@@ -74,6 +75,11 @@ const createCustomIcon = (color: string, label: string) => {
 
 const originIcon = createCustomIcon('#10b981', 'A');
 const destinationIcon = createCustomIcon('#ef4444', 'B');
+
+// Create numbered stop icons for intermediate waypoints
+const createStopIcon = (stopNumber: number) => {
+  return createCustomIcon('#3b82f6', stopNumber.toString());
+};
 
 // Sub-component to handle map auto-zoom
 function MapUpdater({ locations, routePlan }: { locations: Location[]; routePlan: RoutePlan | null }) {
@@ -395,6 +401,24 @@ export default function Map() {
                   </div>
                 </Popup>
               </Marker>
+
+              {/* Intermediate stop markers */}
+              {routePlan.stops && routePlan.stops.map((stop, index) => (
+                <Marker
+                  key={`stop-${index}`}
+                  position={[stop.latitude, stop.longitude]}
+                  icon={createStopIcon(index + 1)}
+                >
+                  <Popup>
+                    <div className="text-sm">
+                      <h3 className="font-bold text-blue-700 mb-1">Stop {index + 1}</h3>
+                      <p className="text-gray-900">{stop.name}</p>
+                      <p className="text-xs text-gray-500 mt-1 capitalize">{stop.type}</p>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
               {/* Destination marker */}
               <Marker
                 position={[routePlan.destination.latitude, routePlan.destination.longitude]}

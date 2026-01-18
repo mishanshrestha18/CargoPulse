@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, RefreshCw, Trash2, Pencil, X, Plus, Download, Search } from 'lucide-react';
+import { Package, RefreshCw, Trash2, Pencil, X, Plus, Download, Search, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Inventory, InventoryInsert } from '@/types/database';
 
@@ -48,7 +48,11 @@ export default function InventoryTable() {
 
   // Search and Filter State
   const [searchTerm, setSearchTerm] = useState('');
+  const [locationSearch, setLocationSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+
+  // Collapsed locations state (default all expanded)
+  const [collapsedLocations, setCollapsedLocations] = useState<Set<string>>(new Set());
 
   const fetchInventory = async () => {
     try {
@@ -58,7 +62,7 @@ export default function InventoryTable() {
       const { data, error: fetchError } = await supabase
         .from('inventory')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('item_name', { ascending: true });
 
       if (fetchError) throw fetchError;
 
@@ -77,10 +81,14 @@ export default function InventoryTable() {
   // Filtered Inventory
   const filteredInventory = inventory.filter(item => {
     // Search by Item Name OR SKU
-    const matchesSearch = 
+    const matchesSearch =
       item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.sku.toLowerCase().includes(searchTerm.toLowerCase());
-    
+      (item.sku || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Search by Location
+    const matchesLocation =
+      (item.location || '').toLowerCase().includes(locationSearch.toLowerCase());
+
     // Filter by Status (using same logic as calculateStatus)
     let matchesStatus = true;
     if (filterStatus === 'In Stock') {
@@ -91,9 +99,34 @@ export default function InventoryTable() {
       matchesStatus = item.quantity === 0;
     }
     // If "All", matchesStatus remains true
-    
-    return matchesSearch && matchesStatus;
+
+    return matchesSearch && matchesLocation && matchesStatus;
   });
+
+  // Group inventory by location (warehouse)
+  const inventoryByLocation = filteredInventory.reduce((acc, item) => {
+    const location = item.location || 'Unknown Location';
+    if (!acc[location]) {
+      acc[location] = [];
+    }
+    acc[location].push(item);
+    return acc;
+  }, {} as Record<string, Inventory[]>);
+
+  // Get locations sorted alphabetically
+  const locations = Object.keys(inventoryByLocation).sort();
+
+  const toggleLocation = (location: string) => {
+    setCollapsedLocations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(location)) {
+        newSet.delete(location);
+      } else {
+        newSet.add(location);
+      }
+      return newSet;
+    });
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this inventory item?')) return;
@@ -282,17 +315,27 @@ export default function InventoryTable() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 dark:text-gray-400" />
           <input
             type="text"
-            placeholder="Search items..."
+            placeholder="Search items by name or SKU..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+          />
+        </div>
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 dark:text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search location..."
+            value={locationSearch}
+            onChange={(e) => setLocationSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
         <div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-gray-700"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white dark:bg-gray-700 dark:text-gray-100"
           >
             <option value="All">All Status</option>
             <option value="In Stock">In Stock</option>
@@ -317,80 +360,110 @@ export default function InventoryTable() {
         <div className="text-center py-12">
           <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500 dark:text-gray-400">
-            {inventory.length === 0 
-              ? 'No inventory items found. Add one to get started!' 
+            {inventory.length === 0
+              ? 'No inventory items found. Add one to get started!'
               : 'No items match your search criteria.'}
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">SKU</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Item Name</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Quantity</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Location</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Price/Unit</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Max Discount</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInventory.map((item) => {
-                // Calculate status dynamically based on current quantity
-                const currentStatus = calculateStatus(item.quantity);
-                const statusColor =
-                  currentStatus === 'Out of Stock' ? 'text-red-600 bg-red-50' :
-                  currentStatus === 'Low Stock' ? 'text-yellow-600 bg-yellow-50' :
-                  'text-green-600 bg-green-50';
+        <div className="space-y-6">
+          {locations.map((location) => {
+            const items = inventoryByLocation[location];
+            const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+            const isCollapsed = collapsedLocations.has(location);
 
-                return (
-                  <tr key={item.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <td className="py-3 px-4">
-                      <span className="text-white font-mono text-sm">{item.sku}</span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Package className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                        <span className="text-gray-900 dark:text-gray-100 font-medium">{item.item_name}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-white font-semibold">{item.quantity}</span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-700 dark:text-gray-300">{item.location}</td>
-                    <td className="py-3 px-4 text-gray-900 dark:text-gray-100 font-medium">${(item.price_per_unit || 0).toFixed(2)}</td>
-                    <td className="py-3 px-4 text-gray-900 dark:text-gray-100">{item.max_discount || 0}%</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
-                        {currentStatus}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleEdit(item)}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
-                          title="Edit item"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
-                          title="Delete item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            return (
+              <div key={location} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                {/* Location Header - Clickable */}
+                <button
+                  onClick={() => toggleLocation(location)}
+                  className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-600 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-gray-650 dark:hover:to-gray-750 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                      <ChevronDown className={`w-5 h-5 text-blue-600 dark:text-blue-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                      <Package className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      {location}
+                    </h3>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      {items.length} items • {totalItems} total units
+                    </span>
+                  </div>
+                </button>
+
+                {/* Items Table */}
+                {!isCollapsed && (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">SKU</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Item Name</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Quantity</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Price/Unit</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Max Discount</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item) => {
+                        // Calculate status dynamically based on current quantity
+                        const currentStatus = calculateStatus(item.quantity);
+                        const statusColor =
+                          currentStatus === 'Out of Stock' ? 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400' :
+                          currentStatus === 'Low Stock' ? 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                          'text-green-600 bg-green-50 dark:bg-green-900/30 dark:text-green-400';
+
+                        return (
+                          <tr key={item.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                            <td className="py-3 px-4">
+                              <span className="text-gray-900 dark:text-gray-100 font-mono text-sm">{item.sku}</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <Package className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                <span className="text-gray-900 dark:text-gray-100 font-medium">{item.item_name}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="text-gray-900 dark:text-gray-100 font-semibold">{item.quantity}</span>
+                            </td>
+                            <td className="py-3 px-4 text-gray-900 dark:text-gray-100 font-medium">${(item.price_per_unit || 0).toFixed(2)}</td>
+                            <td className="py-3 px-4 text-gray-900 dark:text-gray-100">{item.max_discount || 0}%</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColor}`}>
+                                {currentStatus}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleEdit(item)}
+                                  className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
+                                  title="Edit item"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
+                                  title="Delete item"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -5,9 +5,10 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import { supabase } from '@/lib/supabase';
 import type { Location } from '@/types/database';
 import L from 'leaflet';
-import { Truck, Plane, MapPin, Clock, Package } from 'lucide-react';
+import { Truck, Plane, Clock, Package, Ship } from 'lucide-react';
 import greatCircle from '@turf/great-circle';
 import { point } from '@turf/helpers';
+import { canConnectByRoad } from '@/lib/routing';
 
 interface ActiveShipment {
   id: string;
@@ -19,18 +20,34 @@ interface ActiveShipment {
   created_at: string;
   arrival_time: string;
   status: string;
+  urgency: 'standard' | 'express';
   drivers: { name: string };
   vehicles: { name: string };
   inventory: { item_name: string };
   quantity: number;
 }
 
+interface RouteSegment {
+  type: 'road' | 'air';
+  geometry: [number, number][];
+}
+
 interface ShipmentWithRoute extends ActiveShipment {
   routeGeometry: [number, number][];
+  routeSegments: RouteSegment[]; // For hybrid routes with different segment types
   originCoords: [number, number];
   destCoords: [number, number];
   currentPosition: [number, number];
   progress: number;
+  isHybridRoute: boolean; // True if route uses both air and road
+  stops: Array<{
+    id: number;
+    location_id: number;
+    stop_order: number;
+    name: string;
+    coords: [number, number];
+    notes?: string;
+  }>;
 }
 
 // Fix default marker icon issue in React
@@ -167,16 +184,45 @@ const createLocationIcon = (color: string, label: string) => {
 const originIcon = createLocationIcon('#10b981', '●');
 const destinationIcon = createLocationIcon('#ef4444', '●');
 
+// Create numbered stop icons for intermediate waypoints
+const createStopIcon = (stopNumber: number) => {
+  return L.divIcon({
+    className: 'custom-stop-marker',
+    html: `
+      <div style="
+        background-color: #8b5cf6;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <span style="
+          color: white;
+          font-weight: bold;
+          font-size: 11px;
+        ">${stopNumber}</span>
+      </div>
+    `,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
 // Sub-component to handle map auto-zoom
 function MapUpdater({ locations, shipments }: { locations: Location[]; shipments: ShipmentWithRoute[] }) {
   const map = useMap();
 
   useEffect(() => {
     if (shipments.length > 0) {
-      // Include all truck positions and routes in bounds
+      // Include all truck positions, routes, and stops in bounds
       const bounds = L.latLngBounds([
         ...shipments.map(s => s.currentPosition),
         ...shipments.flatMap(s => s.routeGeometry),
+        ...shipments.flatMap(s => s.stops?.map(stop => stop.coords) || []),
       ]);
       map.fitBounds(bounds, { padding: [80, 80], maxZoom: 12 });
     } else if (locations.length > 0) {
@@ -281,12 +327,19 @@ export default function MapWithLiveTracking() {
         return;
       }
 
+      // Get all shipment IDs for fetching stops
+      const shipmentIds = shipmentsData.map((s: any) => s.id);
+
       // Fetch related data separately
-      const [driversRes, vehiclesRes, inventoryRes, locationsRes] = await Promise.all([
+      const [driversRes, vehiclesRes, inventoryRes, locationsRes, stopsRes] = await Promise.all([
         supabase.from('drivers').select('id, name'),
         supabase.from('vehicles').select('id, name'),
         supabase.from('inventory').select('id, item_name'),
         supabase.from('locations').select('*'),
+        supabase.from('shipment_stops')
+          .select('*')
+          .in('shipment_id', shipmentIds)
+          .order('stop_order', { ascending: true }),
       ]);
 
       // Create lookup maps
@@ -296,6 +349,21 @@ export default function MapWithLiveTracking() {
       const locationsMap = new Map<string, Location>();
       locationsRes.data?.forEach(loc => {
         locationsMap.set(String(loc.id), loc);
+      });
+
+      // Group stops by shipment_id
+      const stopsMap = new Map<string, Array<{ id: number; location_id: number; stop_order: number; notes?: string }>>();
+      stopsRes.data?.forEach((stop: any) => {
+        const shipmentId = String(stop.shipment_id);
+        if (!stopsMap.has(shipmentId)) {
+          stopsMap.set(shipmentId, []);
+        }
+        stopsMap.get(shipmentId)!.push({
+          id: stop.id,
+          location_id: stop.location_id,
+          stop_order: stop.stop_order,
+          notes: stop.notes,
+        });
       });
 
       // Fetch route geometry and calculate positions
@@ -308,36 +376,182 @@ export default function MapWithLiveTracking() {
             return null;
           }
 
+          // Get intermediate stops for this shipment
+          const shipmentStops = stopsMap.get(String(shipment.id)) || [];
+          const stopsWithCoords = shipmentStops
+            .map(stop => {
+              const loc = locationsMap.get(String(stop.location_id));
+              if (!loc) return null;
+              return {
+                id: stop.id,
+                location_id: stop.location_id,
+                stop_order: stop.stop_order,
+                name: loc.name,
+                coords: [loc.latitude, loc.longitude] as [number, number],
+                notes: stop.notes,
+              };
+            })
+            .filter((s): s is NonNullable<typeof s> => s !== null)
+            .sort((a, b) => a.stop_order - b.stop_order);
+
           // Determine route geometry based on shipping method
           let routeGeometry: [number, number][];
+          let routeSegments: RouteSegment[] = [];
+          let isHybridRoute = false;
+
+          // Build list of all waypoints with their locations
+          const allWaypoints: Location[] = [
+            originLoc,
+            ...stopsWithCoords.map(s => {
+              const loc = locationsMap.get(String(s.location_id));
+              return loc!;
+            }).filter(Boolean),
+            destLoc,
+          ];
 
           try {
             if (shipment.shipping_method === 'plane') {
               // Use geodesic (great circle) path for airplanes
-              const start = point([originLoc.longitude, originLoc.latitude]);
-              const end = point([destLoc.longitude, destLoc.latitude]);
-              const arc = greatCircle(start, end, { npoints: 100 });
-
-              routeGeometry = arc.geometry.coordinates.map(
-                (coord: [number, number]) => [coord[1], coord[0]] as [number, number] // [lon, lat] to [lat, lon]
-              );
-            } else {
-              // Use OSRM road routing for ground vehicles
-              const url = `https://router.project-osrm.org/route/v1/driving/${originLoc.longitude},${originLoc.latitude};${destLoc.longitude},${destLoc.latitude}?overview=full&geometries=geojson`;
-              const response = await fetch(url);
-              const data = await response.json();
-
-              if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
-                // Fallback to straight line if routing fails
-                routeGeometry = [
-                  [originLoc.latitude, originLoc.longitude],
-                  [destLoc.latitude, destLoc.longitude]
+              // For planes with stops, we create segments between each point
+              if (stopsWithCoords.length > 0) {
+                const allPoints = [
+                  { lat: originLoc.latitude, lon: originLoc.longitude },
+                  ...stopsWithCoords.map(s => ({ lat: s.coords[0], lon: s.coords[1] })),
+                  { lat: destLoc.latitude, lon: destLoc.longitude },
                 ];
+                routeGeometry = [];
+                for (let i = 0; i < allPoints.length - 1; i++) {
+                  const start = point([allPoints[i].lon, allPoints[i].lat]);
+                  const end = point([allPoints[i + 1].lon, allPoints[i + 1].lat]);
+                  const arc = greatCircle(start, end, { npoints: 50 });
+                  const segmentCoords = (arc.geometry.coordinates as number[][]).map(
+                    (coord) => [coord[1], coord[0]] as [number, number]
+                  );
+                  // Avoid duplicate points at segment boundaries
+                  if (i > 0) segmentCoords.shift();
+                  routeGeometry.push(...segmentCoords);
+                  routeSegments.push({ type: 'air', geometry: segmentCoords });
+                }
               } else {
-                const route = data.routes[0];
-                routeGeometry = route.geometry.coordinates.map(
-                  (coord: [number, number]) => [coord[1], coord[0]] as [number, number] // [lon, lat] to [lat, lon]
+                const start = point([originLoc.longitude, originLoc.latitude]);
+                const end = point([destLoc.longitude, destLoc.latitude]);
+                const arc = greatCircle(start, end, { npoints: 100 });
+                routeGeometry = (arc.geometry.coordinates as number[][]).map(
+                  (coord) => [coord[1], coord[0]] as [number, number]
                 );
+                routeSegments.push({ type: 'air', geometry: routeGeometry });
+              }
+            } else {
+              // For ground vehicles, check if we need hybrid routing
+              // Check each segment to see if it crosses an ocean
+              let needsHybridRouting = false;
+              for (let i = 0; i < allWaypoints.length - 1; i++) {
+                if (!canConnectByRoad(allWaypoints[i], allWaypoints[i + 1])) {
+                  needsHybridRouting = true;
+                  break;
+                }
+              }
+
+              if (needsHybridRouting) {
+                // HYBRID ROUTING: Use air for ocean crossings, road for ground segments
+                isHybridRoute = true;
+                routeGeometry = [];
+
+                // Helper function to fetch with timeout
+                const fetchWithTimeout = async (url: string, timeoutMs: number = 5000) => {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+                  try {
+                    const response = await fetch(url, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    return response;
+                  } catch (err) {
+                    clearTimeout(timeoutId);
+                    throw err;
+                  }
+                };
+
+                for (let i = 0; i < allWaypoints.length - 1; i++) {
+                  const fromLoc = allWaypoints[i];
+                  const toLoc = allWaypoints[i + 1];
+
+                  if (canConnectByRoad(fromLoc, toLoc)) {
+                    // Try road routing for this segment with timeout
+                    try {
+                      const segmentWaypoints = `${fromLoc.longitude},${fromLoc.latitude};${toLoc.longitude},${toLoc.latitude}`;
+                      const url = `https://router.project-osrm.org/route/v1/driving/${segmentWaypoints}?overview=full&geometries=geojson`;
+                      const response = await fetchWithTimeout(url, 5000);
+                      const data = await response.json();
+
+                      if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                        const segmentGeometry = data.routes[0].geometry.coordinates.map(
+                          (coord: [number, number]) => [coord[1], coord[0]] as [number, number]
+                        );
+                        routeSegments.push({ type: 'road', geometry: segmentGeometry });
+                        routeGeometry.push(...segmentGeometry);
+                      } else {
+                        throw new Error('Road routing failed');
+                      }
+                    } catch {
+                      // Fallback to straight line for road segment
+                      const straightLine: [number, number][] = [
+                        [fromLoc.latitude, fromLoc.longitude],
+                        [toLoc.latitude, toLoc.longitude],
+                      ];
+                      routeSegments.push({ type: 'road', geometry: straightLine });
+                      routeGeometry.push(...straightLine);
+                    }
+                  } else {
+                    // Use air (great circle) for ocean crossing
+                    const start = point([fromLoc.longitude, fromLoc.latitude]);
+                    const end = point([toLoc.longitude, toLoc.latitude]);
+                    const arc = greatCircle(start, end, { npoints: 50 });
+                    const arcGeometry = (arc.geometry.coordinates as number[][]).map(
+                      (coord) => [coord[1], coord[0]] as [number, number]
+                    );
+                    routeSegments.push({ type: 'air', geometry: arcGeometry });
+                    routeGeometry.push(...arcGeometry);
+                  }
+                }
+              } else {
+                // Standard OSRM road routing for ground vehicles (all on same landmass)
+                const waypoints = [
+                  `${originLoc.longitude},${originLoc.latitude}`,
+                  ...stopsWithCoords.map(s => `${s.coords[1]},${s.coords[0]}`), // lon,lat format
+                  `${destLoc.longitude},${destLoc.latitude}`,
+                ].join(';');
+
+                const url = `https://router.project-osrm.org/route/v1/driving/${waypoints}?overview=full&geometries=geojson`;
+
+                // Fetch with timeout to prevent hanging
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 8000);
+                let data;
+                try {
+                  const response = await fetch(url, { signal: controller.signal });
+                  clearTimeout(timeoutId);
+                  data = await response.json();
+                } catch {
+                  clearTimeout(timeoutId);
+                  // Timeout or network error - use fallback
+                  data = { code: 'Error' };
+                }
+
+                if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+                  // Fallback to straight line through all points if routing fails
+                  routeGeometry = [
+                    [originLoc.latitude, originLoc.longitude],
+                    ...stopsWithCoords.map(s => s.coords),
+                    [destLoc.latitude, destLoc.longitude],
+                  ];
+                  routeSegments.push({ type: 'road', geometry: routeGeometry });
+                } else {
+                  const route = data.routes[0];
+                  routeGeometry = route.geometry.coordinates.map(
+                    (coord: [number, number]) => [coord[1], coord[0]] as [number, number]
+                  );
+                  routeSegments.push({ type: 'road', geometry: routeGeometry });
+                }
               }
             }
 
@@ -354,10 +568,13 @@ export default function MapWithLiveTracking() {
               vehicles: vehiclesMap.get(String(shipment.vehicle_id)) || { name: 'Unknown' },
               inventory: inventoryMap.get(String(shipment.inventory_item_id)) || { item_name: 'Unknown' },
               routeGeometry,
+              routeSegments,
+              isHybridRoute,
               originCoords: [originLoc.latitude, originLoc.longitude] as [number, number],
               destCoords: [destLoc.latitude, destLoc.longitude] as [number, number],
               currentPosition: position,
               progress: progress * 100,
+              stops: stopsWithCoords,
             };
           } catch (err) {
             console.error('Error fetching route for shipment:', shipment.id, err);
@@ -454,22 +671,37 @@ export default function MapWithLiveTracking() {
           {/* Render active shipments */}
           {shipments.map((shipment) => (
             <div key={shipment.id}>
-              {/* Route polyline (different styles for planes vs trucks) */}
-              <Polyline
-                positions={shipment.routeGeometry}
-                color={
-                  shipment.shipping_method === 'plane'
-                    ? '#3b82f6' // Blue for airplanes
-                    : (shipment.urgency === 'express' ? '#ea580c' : '#f59e0b') // Orange/amber for trucks
-                }
-                weight={shipment.shipping_method === 'plane' ? 3 : 4}
-                opacity={0.7}
-                dashArray={
-                  shipment.shipping_method === 'plane'
-                    ? '10, 10' // Dashed for airplanes
-                    : (shipment.urgency === 'express' ? '10, 5' : undefined) // Express trucks dashed
-                }
-              />
+              {/* Route polylines - render segments separately for hybrid routes */}
+              {shipment.isHybridRoute ? (
+                // Hybrid route: render each segment with appropriate styling
+                shipment.routeSegments.map((segment, idx) => (
+                  <Polyline
+                    key={`segment-${shipment.id}-${idx}`}
+                    positions={segment.geometry}
+                    color={segment.type === 'air' ? '#3b82f6' : '#f59e0b'} // Blue for air, amber for road
+                    weight={segment.type === 'air' ? 3 : 4}
+                    opacity={0.7}
+                    dashArray={segment.type === 'air' ? '10, 10' : undefined} // Dashed for air segments
+                  />
+                ))
+              ) : (
+                // Standard route: single polyline
+                <Polyline
+                  positions={shipment.routeGeometry}
+                  color={
+                    shipment.shipping_method === 'plane'
+                      ? '#3b82f6' // Blue for airplanes
+                      : (shipment.urgency === 'express' ? '#ea580c' : '#f59e0b') // Orange/amber for trucks
+                  }
+                  weight={shipment.shipping_method === 'plane' ? 3 : 4}
+                  opacity={0.7}
+                  dashArray={
+                    shipment.shipping_method === 'plane'
+                      ? '10, 10' // Dashed for airplanes
+                      : (shipment.urgency === 'express' ? '10, 5' : undefined) // Express trucks dashed
+                  }
+                />
+              )}
 
               {/* Origin marker */}
               <Marker
@@ -495,6 +727,30 @@ export default function MapWithLiveTracking() {
                 </Popup>
               </Marker>
 
+              {/* Intermediate stop markers */}
+              {shipment.stops && shipment.stops.map((stop) => (
+                <Marker
+                  key={`stop-${shipment.id}-${stop.id}`}
+                  position={stop.coords}
+                  icon={createStopIcon(stop.stop_order)}
+                >
+                  <Popup>
+                    <div className="text-sm min-w-[150px]">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-xs font-bold">
+                          {stop.stop_order}
+                        </div>
+                        <h3 className="font-bold text-purple-700">Stop {stop.stop_order}</h3>
+                      </div>
+                      <p className="text-gray-800 font-medium">{stop.name}</p>
+                      {stop.notes && (
+                        <p className="text-gray-600 text-xs mt-1 italic">{stop.notes}</p>
+                      )}
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+
               {/* Moving vehicle marker (truck or airplane) */}
               <Marker
                 position={shipment.currentPosition}
@@ -507,13 +763,28 @@ export default function MapWithLiveTracking() {
                 <Popup>
                   <div className="text-sm min-w-[200px]">
                     <div className="flex items-center gap-2 mb-2">
-                      {shipment.shipping_method === 'plane' ? (
+                      {shipment.isHybridRoute ? (
+                        <div className="flex items-center gap-1">
+                          <Truck className="w-4 h-4 text-amber-600" />
+                          <span className="text-gray-400">+</span>
+                          <Plane className="w-4 h-4 text-blue-600" />
+                        </div>
+                      ) : shipment.shipping_method === 'plane' ? (
                         <Plane className="w-4 h-4 text-blue-600" />
                       ) : (
                         <Truck className="w-4 h-4 text-blue-600" />
                       )}
                       <h3 className="font-bold text-gray-900">{shipment.vehicles?.name}</h3>
                     </div>
+
+                    {/* Hybrid route indicator */}
+                    {shipment.isHybridRoute && (
+                      <div className="mb-2 px-2 py-1 bg-gradient-to-r from-amber-50 to-blue-50 rounded text-xs">
+                        <span className="text-amber-700">Hybrid Route</span>
+                        <span className="text-gray-500 mx-1">-</span>
+                        <span className="text-gray-600">Ground + Air freight</span>
+                      </div>
+                    )}
 
                     <div className="space-y-1 text-xs text-gray-700">
                       <p><span className="font-medium">{shipment.shipping_method === 'plane' ? 'Pilot' : 'Driver'}:</span> {shipment.drivers?.name}</p>
@@ -532,9 +803,11 @@ export default function MapWithLiveTracking() {
                       <div className="w-full bg-gray-200 rounded-full h-1.5">
                         <div
                           className={`h-1.5 rounded-full ${
-                            shipment.urgency === 'express'
-                              ? 'bg-gradient-to-r from-orange-500 to-red-500'
-                              : 'bg-gradient-to-r from-blue-500 to-green-500'
+                            shipment.isHybridRoute
+                              ? 'bg-gradient-to-r from-amber-500 via-blue-500 to-amber-500'
+                              : shipment.urgency === 'express'
+                                ? 'bg-gradient-to-r from-orange-500 to-red-500'
+                                : 'bg-gradient-to-r from-blue-500 to-green-500'
                           }`}
                           style={{ width: `${shipment.progress}%` }}
                         />
@@ -542,7 +815,7 @@ export default function MapWithLiveTracking() {
                       <p className="text-xs text-gray-500 mt-1">{shipment.progress.toFixed(1)}% complete</p>
                     </div>
 
-                    <div className="mt-2 pt-2 border-t border-gray-200">
+                    <div className="mt-2 pt-2 border-t border-gray-200 flex gap-2">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                         shipment.urgency === 'express'
                           ? 'bg-orange-100 text-orange-700'
@@ -550,6 +823,11 @@ export default function MapWithLiveTracking() {
                       }`}>
                         {shipment.urgency.toUpperCase()}
                       </span>
+                      {shipment.isHybridRoute && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+                          HYBRID
+                        </span>
+                      )}
                     </div>
                   </div>
                 </Popup>

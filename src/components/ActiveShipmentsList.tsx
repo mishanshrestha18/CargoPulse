@@ -10,6 +10,7 @@ import autoTable from 'jspdf-autotable';
 
 interface ShipmentItem {
   id: number;
+  inventory_item_id: string;
   item_name: string;
   quantity: number;
   price_per_unit: number;
@@ -45,7 +46,12 @@ interface Driver {
   status: string;
 }
 
-export default function ActiveShipmentsList() {
+interface ActiveShipmentsListProps {
+  refreshTrigger?: number;
+  onShipmentChange?: () => void;
+}
+
+export default function ActiveShipmentsList({ refreshTrigger, onShipmentChange }: ActiveShipmentsListProps) {
   const { addNotification } = useNotifications();
   const [shipments, setShipments] = useState<ActiveShipment[]>([]);
   const [idleDrivers, setIdleDrivers] = useState<Driver[]>([]);
@@ -90,14 +96,24 @@ export default function ActiveShipmentsList() {
         .select('*')
         .in('shipment_id', shipmentIds);
 
-      // Create a map of shipment_id -> items[]
+      // Create a map of shipment_id -> items[] with enriched data
       const shipmentItemsMap = new Map<string, ShipmentItem[]>();
       (allShipmentItems || []).forEach(item => {
         const shipmentId = String(item.shipment_id);
         if (!shipmentItemsMap.has(shipmentId)) {
           shipmentItemsMap.set(shipmentId, []);
         }
-        shipmentItemsMap.get(shipmentId)!.push(item);
+
+        // Enrich item with inventory data and delivery location
+        const invItem = inventoryMap.get(String(item.inventory_item_id));
+        const deliveryLocation = item.delivery_location_id ? locationsMap.get(String(item.delivery_location_id)) : null;
+
+        shipmentItemsMap.get(shipmentId)!.push({
+          ...item,
+          item_name: invItem?.item_name || item.item_name || 'Unknown',
+          inventory_item_id: String(item.inventory_item_id),
+          delivery_location_name: deliveryLocation?.name, // Add delivery location name
+        });
       });
 
       // Map the data manually
@@ -130,6 +146,14 @@ export default function ActiveShipmentsList() {
     return () => clearInterval(interval);
   }, []);
 
+  // Refetch when refreshTrigger changes
+  useEffect(() => {
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      console.log('🔄 ActiveShipmentsList: Refresh trigger detected');
+      fetchData();
+    }
+  }, [refreshTrigger]);
+
   const calculateProgress = (createdAt: string, arrivalTime: string): number => {
     const start = new Date(createdAt).getTime();
     const end = new Date(arrivalTime).getTime();
@@ -157,13 +181,14 @@ export default function ActiveShipmentsList() {
   const handleCancelShipment = async (shipment: ActiveShipment) => {
     console.log('Cancel button clicked for shipment:', shipment.id);
 
-    if (!confirm(`Cancel shipment to ${shipment.locations_destination?.name}?`)) {
+    if (!confirm(`Cancel shipment to ${shipment.locations_destination?.name}?\n\nThis will restore inventory and free up the driver/vehicle.`)) {
       console.log('User cancelled the confirmation dialog');
       return;
     }
 
     try {
       console.log('Starting cancellation process for shipment:', shipment.id);
+      setError(null);
 
       // Update shipment status to Cancelled
       const { error: shipmentError, data: shipmentData } = await supabase
@@ -204,56 +229,149 @@ export default function ActiveShipmentsList() {
       }
       console.log('✅ Vehicle status updated to Idle');
 
-      // Return inventory
-      const { data: inventoryData, error: inventoryFetchError } = await supabase
-        .from('inventory')
-        .select('quantity')
-        .eq('id', shipment.inventory_item_id)
-        .single();
+      // Return inventory - handle both single-item and multi-item shipments
+      // Wrapped in try-catch to allow cancellation even if inventory restoration fails
+      try {
+        if (shipment.shipment_items && shipment.shipment_items.length > 0) {
+        // Multi-item shipment - restore each item
+        console.log('📦 Restoring multi-item shipment inventory...');
+        for (const item of shipment.shipment_items) {
+          const { data: inventoryData, error: inventoryFetchError } = await supabase
+            .from('inventory')
+            .select('quantity')
+            .eq('id', item.inventory_item_id)
+            .single();
 
-      if (inventoryFetchError) {
-        console.error('❌ Inventory fetch error:', JSON.stringify(inventoryFetchError, null, 2));
-        throw new Error(`Failed to fetch inventory: ${inventoryFetchError.message || JSON.stringify(inventoryFetchError)}`);
-      }
+          if (inventoryFetchError) {
+            console.error('❌ Inventory fetch error for item:', item.item_name, inventoryFetchError);
+            continue; // Skip this item but continue with others
+          }
 
-      if (inventoryData) {
-        const newQuantity = inventoryData.quantity + shipment.quantity;
-        const newStatus = newQuantity === 0 ? 'Out of Stock' : newQuantity < 10 ? 'Low Stock' : 'In Stock';
+          if (inventoryData) {
+            const newQuantity = inventoryData.quantity + item.quantity;
+            const newStatus = newQuantity === 0 ? 'Out of Stock' : newQuantity < 10 ? 'Low Stock' : 'In Stock';
 
-        const { error: inventoryUpdateError } = await supabase
-          .from('inventory')
-          .update({ quantity: newQuantity, status: newStatus })
-          .eq('id', shipment.inventory_item_id)
-          .select();
+            const { error: inventoryUpdateError } = await supabase
+              .from('inventory')
+              .update({ quantity: newQuantity, status: newStatus })
+              .eq('id', item.inventory_item_id);
 
-        if (inventoryUpdateError) {
-          console.error('❌ Inventory update error:', JSON.stringify(inventoryUpdateError, null, 2));
-          throw new Error(`Failed to update inventory: ${inventoryUpdateError.message || JSON.stringify(inventoryUpdateError)}`);
+            if (inventoryUpdateError) {
+              console.error('❌ Inventory update error for item:', item.item_name, inventoryUpdateError);
+            } else {
+              console.log(`✅ Inventory updated: ${item.item_name} +${item.quantity} units, new quantity: ${newQuantity}`);
+            }
+          }
         }
-        console.log(`✅ Inventory updated: +${shipment.quantity} units, new quantity: ${newQuantity}`);
+
+        // Show success message for multi-item
+        const totalItems = shipment.shipment_items.reduce((sum, item) => sum + item.quantity, 0);
+        const cancelMessage = `Shipment cancelled. ${shipment.shipment_items.length} products (${totalItems} total units) returned to inventory.`;
+        setSuccessMessage(cancelMessage);
+        setTimeout(() => setSuccessMessage(null), 5000);
+
+        addNotification(
+          'cancel',
+          'Shipment Cancelled',
+          `${shipment.shipment_items.length} products to ${shipment.locations_destination?.name || 'destination'} cancelled`
+        );
+
+        showToast(
+          'cancel',
+          'Shipment Cancelled',
+          `${totalItems} units returned to inventory`
+        );
+      } else if (shipment.inventory_item_id) {
+        // Single-item shipment (legacy)
+        console.log('📦 Restoring single-item shipment inventory...');
+        const { data: inventoryData, error: inventoryFetchError } = await supabase
+          .from('inventory')
+          .select('quantity')
+          .eq('id', shipment.inventory_item_id)
+          .single();
+
+        if (inventoryFetchError) {
+          console.error('❌ Inventory fetch error:', JSON.stringify(inventoryFetchError, null, 2));
+          throw new Error(`Failed to fetch inventory: ${inventoryFetchError.message || JSON.stringify(inventoryFetchError)}`);
+        }
+
+        if (inventoryData) {
+          const newQuantity = inventoryData.quantity + shipment.quantity;
+          const newStatus = newQuantity === 0 ? 'Out of Stock' : newQuantity < 10 ? 'Low Stock' : 'In Stock';
+
+          const { error: inventoryUpdateError } = await supabase
+            .from('inventory')
+            .update({ quantity: newQuantity, status: newStatus })
+            .eq('id', shipment.inventory_item_id)
+            .select();
+
+          if (inventoryUpdateError) {
+            console.error('❌ Inventory update error:', JSON.stringify(inventoryUpdateError, null, 2));
+            throw new Error(`Failed to update inventory: ${inventoryUpdateError.message || JSON.stringify(inventoryUpdateError)}`);
+          }
+          console.log(`✅ Inventory updated: +${shipment.quantity} units, new quantity: ${newQuantity}`);
+        }
+
+        // Show success message for single-item
+        const cancelMessage = `Shipment cancelled. ${shipment.quantity}x ${shipment.inventory?.item_name} returned to inventory.`;
+        setSuccessMessage(cancelMessage);
+        setTimeout(() => setSuccessMessage(null), 5000);
+
+        addNotification(
+          'cancel',
+          'Shipment Cancelled',
+          `${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name || 'destination'} was cancelled`
+        );
+
+        showToast(
+          'cancel',
+          'Shipment Cancelled',
+          `${shipment.quantity}x ${shipment.inventory?.item_name} returned to inventory`
+        );
+        } else {
+          // No inventory to restore
+          console.log('⚠️ No inventory items to restore');
+          setSuccessMessage('Shipment cancelled.');
+          setTimeout(() => setSuccessMessage(null), 5000);
+
+          addNotification(
+            'cancel',
+            'Shipment Cancelled',
+            `Shipment to ${shipment.locations_destination?.name || 'destination'} was cancelled`
+          );
+
+          showToast(
+            'cancel',
+            'Shipment Cancelled',
+            'Shipment has been cancelled'
+          );
+        }
+      } catch (inventoryError) {
+        // Inventory restoration failed, but shipment is already cancelled
+        console.error('⚠️ Inventory restoration failed, but shipment was cancelled:', inventoryError);
+        setSuccessMessage('Shipment cancelled. Warning: Inventory may not have been restored correctly.');
+        setTimeout(() => setSuccessMessage(null), 5000);
+
+        addNotification(
+          'cancel',
+          'Shipment Cancelled',
+          `Shipment cancelled (inventory restoration may have failed)`
+        );
+
+        showToast(
+          'cancel',
+          'Shipment Cancelled',
+          'Check inventory manually'
+        );
       }
-
-      // Show success message
-      const cancelMessage = `Shipment cancelled. ${shipment.quantity}x ${shipment.inventory?.item_name} returned to inventory.`;
-      setSuccessMessage(cancelMessage);
-      setTimeout(() => setSuccessMessage(null), 5000);
-
-      // Add notification to sidebar
-      addNotification(
-        'cancel',
-        'Shipment Cancelled',
-        `${shipment.quantity}x ${shipment.inventory?.item_name} to ${shipment.locations_destination?.name || 'destination'} was cancelled`
-      );
-
-      // Show toast notification
-      showToast(
-        'cancel',
-        'Shipment Cancelled',
-        `${shipment.quantity}x ${shipment.inventory?.item_name} returned to inventory`
-      );
 
       console.log('Shipment cancelled successfully');
       await fetchData();
+
+      // Notify parent to refresh all components
+      if (onShipmentChange) {
+        onShipmentChange();
+      }
     } catch (err) {
       console.error('Cancel shipment error:', err);
       setError(err instanceof Error ? err.message : 'Failed to cancel shipment');
@@ -341,17 +459,10 @@ export default function ActiveShipmentsList() {
       if (vehicleError) throw vehicleError;
 
       // === MULTI-ITEM INVENTORY TRANSFER LOGIC ===
-      const destinationName = shipment.locations_destination?.name;
-
-      if (!destinationName) {
-        console.error('No destination name for shipment');
-        return;
-      }
-
-      // Fetch all shipment_items for this shipment
+      // Fetch all shipment_items with their delivery locations
       const { data: shipmentItems, error: itemsError } = await supabase
         .from('shipment_items')
-        .select('*')
+        .select('*, locations:delivery_location_id(id, name)')
         .eq('shipment_id', shipment.id);
 
       if (itemsError) {
@@ -360,16 +471,30 @@ export default function ActiveShipmentsList() {
 
       let totalItems = 0;
       const processedItems: string[] = [];
+      const destinationSummary: { [key: string]: string[] } = {};
 
       // Process each item in the manifest
       if (shipmentItems && shipmentItems.length > 0) {
         for (const item of shipmentItems) {
           try {
-            // Check if item exists at destination
+            // Get the delivery location for THIS specific item
+            const itemDestination = (item.locations as any)?.name;
+
+            if (!itemDestination) {
+              console.error(`No delivery location for item ${item.item_name}`);
+              continue;
+            }
+
+            // Track items by destination for summary
+            if (!destinationSummary[itemDestination]) {
+              destinationSummary[itemDestination] = [];
+            }
+
+            // Check if item exists at THIS item's destination
             const { data: existingInventory, error: checkError } = await supabase
               .from('inventory')
               .select('*')
-              .eq('location', destinationName)
+              .eq('location', itemDestination)
               .eq('item_name', item.item_name)
               .maybeSingle();
 
@@ -381,38 +506,56 @@ export default function ActiveShipmentsList() {
             if (existingInventory) {
               // UPDATE: Item exists, increment quantity
               const newQuantity = existingInventory.quantity + item.quantity;
-              await supabase
+              const { error: updateError } = await supabase
                 .from('inventory')
                 .update({
                   quantity: newQuantity,
                   status: newQuantity > 0 ? 'In Stock' : 'Out of Stock'
                 })
                 .eq('id', existingInventory.id);
-              console.log(`✅ Updated ${destinationName}: ${item.item_name} +${item.quantity} (now ${newQuantity})`);
+
+              if (updateError) {
+                console.error(`❌ Failed to update inventory for ${item.item_name}:`, updateError);
+                throw new Error(`Failed to update inventory: ${updateError.message}`);
+              }
+
+              console.log(`✅ Updated ${itemDestination}: ${item.item_name} +${item.quantity} (now ${newQuantity})`);
               totalItems += item.quantity;
               processedItems.push(`${item.quantity}x ${item.item_name}`);
+              destinationSummary[itemDestination].push(`${item.quantity}x ${item.item_name}`);
             } else {
               // INSERT: Create new inventory item
               // Get original inventory details for price/sku
-              const { data: originalInventory } = await supabase
+              const { data: originalInventory, error: fetchError } = await supabase
                 .from('inventory')
                 .select('price_per_unit, sku')
                 .eq('id', item.inventory_item_id)
                 .single();
 
-              await supabase
+              if (fetchError) {
+                console.error(`❌ Failed to fetch original inventory for ${item.item_name}:`, fetchError);
+              }
+
+              const { error: insertError } = await supabase
                 .from('inventory')
                 .insert({
                   item_name: item.item_name,
                   quantity: item.quantity,
-                  location: destinationName,
+                  location: itemDestination,
                   status: 'In Stock',
                   price_per_unit: originalInventory?.price_per_unit || item.price_per_unit || 0,
                   sku: originalInventory?.sku || `SKU-${Date.now()}`,
                 });
-              console.log(`✅ Created ${destinationName}: ${item.item_name} (${item.quantity} units)`);
+
+              if (insertError) {
+                console.error(`❌ Failed to insert inventory for ${item.item_name}:`, insertError);
+                throw new Error(`Failed to insert inventory: ${insertError.message}`);
+              }
+
+              console.log(`✅ Created ${itemDestination}: ${item.item_name} (${item.quantity} units)`);
               totalItems += item.quantity;
               processedItems.push(`${item.quantity}x ${item.item_name}`);
+              destinationSummary[itemDestination].push(`${item.quantity}x ${item.item_name}`);
             }
           } catch (itemErr) {
             console.error(`Error processing item ${item.item_name}:`, itemErr);
@@ -425,21 +568,36 @@ export default function ActiveShipmentsList() {
         ? processedItems[0]
         : `${processedItems.length} items (${totalItems} total units)`;
 
+      // Create multi-destination summary
+      const destinationList = Object.entries(destinationSummary)
+        .map(([dest, items]) => `${dest}: ${items.join(', ')}`)
+        .join(' | ');
+
+      const destinationCount = Object.keys(destinationSummary).length;
+      const notificationMessage = destinationCount > 1
+        ? `${itemsSummary} delivered to ${destinationCount} locations: ${destinationList}`
+        : `${itemsSummary} arrived at ${Object.keys(destinationSummary)[0]}`;
+
       // Add notification to sidebar
       addNotification(
         'arrival',
         'Shipment Arrived',
-        `${itemsSummary} arrived at ${destinationName}. ${shipment.drivers?.name} is now available.`
+        `${notificationMessage}. ${shipment.drivers?.name} is now available.`
       );
 
       // Show toast notification
       showToast(
         'arrival',
         'Shipment Delivered!',
-        `${shipment.drivers?.name} delivered ${itemsSummary} to ${destinationName}`
+        `${shipment.drivers?.name} delivered ${itemsSummary} to ${destinationCount} location${destinationCount > 1 ? 's' : ''}`
       );
 
       await fetchData();
+
+      // Notify parent to refresh all components
+      if (onShipmentChange) {
+        onShipmentChange();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to finish shipment');
     }
@@ -735,11 +893,19 @@ export default function ActiveShipmentsList() {
                         <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Cargo Manifest:</h4>
                         <div className="space-y-1">
                           {shipment.shipment_items.map((item, idx) => (
-                            <div key={idx} className="flex justify-between text-sm bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
-                              <span className="text-gray-700 dark:text-gray-300">{item.item_name}</span>
-                              <span className="text-gray-600 dark:text-gray-400">
-                                {item.quantity} units × ${item.price_per_unit?.toFixed(2)} = ${item.total_cost?.toFixed(2)}
-                              </span>
+                            <div key={idx} className="flex flex-col text-sm bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
+                              <div className="flex justify-between">
+                                <span className="text-gray-700 dark:text-gray-300 font-medium">{item.item_name}</span>
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {item.quantity} units × ${item.price_per_unit?.toFixed(2)} = ${item.total_cost?.toFixed(2)}
+                                </span>
+                              </div>
+                              {(item as any).delivery_location_name && (
+                                <div className="flex items-center gap-1 mt-1 text-xs text-blue-600 dark:text-blue-400">
+                                  <MapPin className="w-3 h-3" />
+                                  <span>Delivering to: {(item as any).delivery_location_name}</span>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

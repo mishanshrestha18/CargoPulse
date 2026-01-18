@@ -20,6 +20,7 @@ import {
   User,
   AlertTriangle,
   X,
+  MapPin,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
@@ -34,6 +35,7 @@ interface NavigationItem {
 const navigation: NavigationItem[] = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, allowedRoles: ['admin'] },
+  { name: 'Locations', href: '/locations', icon: MapPin, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Fleet', href: '/fleet', icon: Truck, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Airplanes', href: '/airplanes', icon: Plane, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Drivers', href: '/drivers', icon: Users, allowedRoles: ['admin', 'dispatcher'] },
