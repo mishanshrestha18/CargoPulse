@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
@@ -26,14 +26,61 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Cache keys for localStorage
+const PROFILE_CACHE_KEY = 'cargopulse_profile_cache';
+const ROLE_CACHE_KEY = 'cargopulse_role_cache';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [userRole, setUserRole] = useState<UserRole>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>(() => {
+    // Initialize from cache if available
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem(ROLE_CACHE_KEY);
+      return cached ? (cached as UserRole) : null;
+    }
+    return null;
+  });
+  const [profile, setProfile] = useState<Profile | null>(() => {
+    // Initialize from cache if available
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem(PROFILE_CACHE_KEY);
+      try {
+        return cached ? JSON.parse(cached) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
+  const profileFetchInProgress = useRef(false);
+
+  // Helper to save to cache
+  const saveToCache = (profileData: Profile | null, role: UserRole) => {
+    if (typeof window !== 'undefined') {
+      if (profileData) {
+        localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profileData));
+      } else {
+        localStorage.removeItem(PROFILE_CACHE_KEY);
+      }
+      if (role) {
+        localStorage.setItem(ROLE_CACHE_KEY, role);
+      } else {
+        localStorage.removeItem(ROLE_CACHE_KEY);
+      }
+    }
+  };
 
   const fetchProfile = async (userId: string) => {
+    // Prevent concurrent profile fetches
+    if (profileFetchInProgress.current) {
+      console.log('Profile fetch already in progress, skipping...');
+      return;
+    }
+
+    profileFetchInProgress.current = true;
+
     try {
       console.log('Fetching profile for user:', userId);
 
@@ -53,10 +100,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         console.error('Error fetching profile:', error);
         console.error('Error details:', JSON.stringify(error));
-        // Even if profile fails, don't set role to null immediately
-        // The user might still be authenticated
-        // Set a default role to allow basic access
-        setUserRole('dispatcher'); // Default fallback role
+        // Use cached role if available, otherwise fallback
+        const cachedRole = localStorage.getItem(ROLE_CACHE_KEY) as UserRole;
+        const fallbackRole = cachedRole || 'dispatcher';
+        setUserRole(fallbackRole);
         return;
       }
 
@@ -64,15 +111,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('Profile loaded:', data);
         setProfile(data);
         setUserRole(data.role as UserRole);
+        // Save to cache for persistence across refreshes
+        saveToCache(data, data.role);
       } else {
         console.warn('No profile data returned');
-        // Set a default role when no profile exists
-        setUserRole('dispatcher');
+        // Use cached role if available
+        const cachedRole = localStorage.getItem(ROLE_CACHE_KEY) as UserRole;
+        setUserRole(cachedRole || 'dispatcher');
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
-      // On any error, set a default role so the app doesn't hang
-      setUserRole('dispatcher');
+      // Use cached role if available
+      const cachedRole = localStorage.getItem(ROLE_CACHE_KEY) as UserRole;
+      setUserRole(cachedRole || 'dispatcher');
+    } finally {
+      profileFetchInProgress.current = false;
     }
   };
 
@@ -89,6 +142,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null);
       setUserRole(null);
       setProfile(null);
+      // Clear cache on sign out
+      saveToCache(null, null);
     } catch (err) {
       console.error('Error signing out:', err);
     }

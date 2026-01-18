@@ -111,3 +111,38 @@ export interface MaintenanceLog {
 }
 
 export type MaintenanceLogInsert = Omit<MaintenanceLog, 'id' | 'created_at'>;
+
+// Supabase Real-time Notifications
+export type NotificationType = 'dispatch' | 'arrival' | 'cancel' | 'alert' | 'maintenance' | 'info';
+
+export interface DBNotification {
+  id: string;
+  created_at: string;
+  user_id?: string; // Optional: for user-specific notifications
+  type: NotificationType;
+  title: string;
+  message: string;
+  is_read: boolean;
+  metadata?: Record<string, any>; // Extra data like shipment_id, vehicle_id, etc.
+}
+
+export type DBNotificationInsert = Omit<DBNotification, 'id' | 'created_at'>;
+
+// Expense Management
+export type ExpenseStatus = 'pending' | 'approved' | 'rejected';
+
+export interface Expense {
+  id: string;
+  created_at: string;
+  user_id: string;
+  driver_name: string;
+  amount: number;
+  description: string;
+  receipt_url?: string;
+  status: ExpenseStatus;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  rejection_reason?: string;
+}
+
+export type ExpenseInsert = Omit<Expense, 'id' | 'created_at'>;

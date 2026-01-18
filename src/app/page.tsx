@@ -8,6 +8,7 @@ import DashboardStats from '@/components/DashboardStats';
 import DashboardCharts from '@/components/DashboardCharts';
 import ShipmentCreator from '@/components/ShipmentCreator';
 import ActiveShipmentsList from '@/components/ActiveShipmentsList';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Dynamically import Map components with no SSR
 const Map = dynamic(() => import('@/components/Map'), {
@@ -20,15 +21,25 @@ const MapWithLiveTracking = dynamic(() => import('@/components/MapWithLiveTracki
 
 export default function Home() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const { userRole } = useAuth();
 
   const handleRefreshAll = () => {
     setRefreshTrigger(prev => prev + 1);
   };
 
+  // Determine what sections to show based on role
+  const isAdmin = userRole === 'admin';
+  const isDispatcher = userRole === 'dispatcher';
+  const isDriver = userRole === 'driver';
+  const canViewAnalytics = isAdmin || isDispatcher;
+  const canDispatch = isAdmin || isDispatcher;
+
   return (
     <div className="p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Logistics Dashboard</h1>
+      <div className="flex items-center justify-between mb-6 pr-12">
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+          {isDriver ? 'Driver Dashboard' : 'Logistics Dashboard'}
+        </h1>
         <button
           onClick={handleRefreshAll}
           className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-md"
@@ -38,20 +49,26 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Dashboard Statistics */}
+      {/* Dashboard Statistics - visible to all roles */}
       <DashboardStats refreshTrigger={refreshTrigger} />
 
-      {/* Dashboard Charts */}
-      <DashboardCharts refreshTrigger={refreshTrigger} />
+      {/* Dashboard Charts - only for admin/dispatcher */}
+      {canViewAnalytics && (
+        <DashboardCharts refreshTrigger={refreshTrigger} />
+      )}
 
-      {/* Shipment Creator - Smart Order Dispatch */}
-      <div className="mb-8">
-        <ShipmentCreator refreshTrigger={refreshTrigger} onDispatchSuccess={handleRefreshAll} />
-      </div>
+      {/* Shipment Creator - Smart Order Dispatch - only for admin/dispatcher */}
+      {canDispatch && (
+        <div className="mb-8">
+          <ShipmentCreator refreshTrigger={refreshTrigger} onDispatchSuccess={handleRefreshAll} />
+        </div>
+      )}
 
       {/* Live Tracking Section - Active Shipments + Moving Trucks Map */}
       <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">Fleet Simulation & Live Tracking</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-100">
+          {isDriver ? 'My Active Shipments' : 'Fleet Simulation & Live Tracking'}
+        </h2>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Active Shipments List (1/3 width) */}
           <div className="lg:col-span-1">
@@ -65,20 +82,21 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      {/* Admin/Dispatcher only sections */}
+      {canDispatch && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Left Column: Input Form */}
+          <div>
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Add New Node</h2>
+            <AddLocationForm />
+          </div>
 
-        {/* Left Column: Input Form */}
-        <div>
-          <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Add New Node</h2>
-          <AddLocationForm />
+          {/* Right Column: Route Planner Map */}
+          <div>
+            <Map />
+          </div>
         </div>
-
-        {/* Right Column: Route Planner Map */}
-        <div>
-          <Map />
-        </div>
-
-      </div>
+      )}
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   X,
   MapPin,
+  Receipt,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
@@ -41,6 +42,7 @@ const navigation: NavigationItem[] = [
   { name: 'Drivers', href: '/drivers', icon: Users, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Warehouse', href: '/warehouse', icon: Warehouse, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'My Tasks', href: '/my-tasks', icon: ClipboardList, allowedRoles: ['driver'] },
+  { name: 'Expenses', href: '/expenses', icon: Receipt, allowedRoles: ['admin', 'driver'] },
   { name: 'Maintenance', href: '/maintenance', icon: Wrench, allowedRoles: ['admin', 'dispatcher'] },
 ];
 

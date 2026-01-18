@@ -54,8 +54,8 @@ function LayoutContent({ children }: { children: ReactNode }) {
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 relative">
-          {/* Notification Bell Icon */}
-          <div className="absolute top-4 right-4 z-30">
+          {/* Notification Bell Icon - positioned to not overlap with refresh button */}
+          <div className="absolute top-4 right-20 z-30">
             <button
               onClick={() => setIsSidebarOpen(true)}
               className="relative p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-md transition-colors"
