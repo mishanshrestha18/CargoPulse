@@ -2,7 +2,8 @@
 
 import { X, Bell, CheckCircle, XCircle, Users, Truck, Trash2, CheckCheck } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
-import type { NotificationType } from '@/contexts/NotificationContext';
+import { useAuth } from '@/contexts/AuthContext';
+import type { NotificationType, Notification } from '@/contexts/NotificationContext';
 
 interface NotificationSidebarProps {
   isOpen: boolean;
@@ -58,9 +59,17 @@ function formatTimestamp(date: Date): string {
 
 export default function NotificationSidebar({ isOpen, onClose }: NotificationSidebarProps) {
   const { notifications, markAsRead, markAllAsRead, clearNotification, clearAllNotifications } = useNotifications();
+  const { userRole } = useAuth();
 
-  // Group notifications by type
-  const groupedCounts = notifications.reduce((acc, notif) => {
+  // Filter notifications based on user role
+  // Drivers should NOT see arrival/cancel notifications (those are for admin/dispatcher only)
+  const isDriver = userRole === 'driver';
+  const filteredNotifications = isDriver
+    ? notifications.filter(n => !['arrival', 'cancel'].includes(n.type))
+    : notifications;
+
+  // Group notifications by type (filtered)
+  const groupedCounts = filteredNotifications.reduce((acc, notif) => {
     acc[notif.type] = (acc[notif.type] || 0) + 1;
     return acc;
   }, {} as Record<NotificationType, number>);
@@ -91,9 +100,9 @@ export default function NotificationSidebar({ isOpen, onClose }: NotificationSid
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Notifications
             </h2>
-            {notifications.length > 0 && (
+            {filteredNotifications.length > 0 && (
               <span className="ml-2 px-2 py-0.5 text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded-full">
-                {notifications.length}
+                {filteredNotifications.length}
               </span>
             )}
           </div>
@@ -106,7 +115,7 @@ export default function NotificationSidebar({ isOpen, onClose }: NotificationSid
         </div>
 
         {/* Stats Summary */}
-        {notifications.length > 0 && (
+        {filteredNotifications.length > 0 && (
           <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30">
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(groupedCounts).map(([type, count]) => {
@@ -130,7 +139,7 @@ export default function NotificationSidebar({ isOpen, onClose }: NotificationSid
         )}
 
         {/* Actions */}
-        {notifications.length > 0 && (
+        {filteredNotifications.length > 0 && (
           <div className="flex gap-2 p-4 border-b border-gray-200 dark:border-gray-700">
             <button
               onClick={markAllAsRead}
@@ -151,7 +160,7 @@ export default function NotificationSidebar({ isOpen, onClose }: NotificationSid
 
         {/* Notification List */}
         <div className="flex-1 overflow-y-auto">
-          {notifications.length === 0 ? (
+          {filteredNotifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <Bell className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-3" />
               <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">No notifications</p>
@@ -161,7 +170,7 @@ export default function NotificationSidebar({ isOpen, onClose }: NotificationSid
             </div>
           ) : (
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {notifications.map(notification => {
+              {filteredNotifications.map(notification => {
                 const config = typeConfig[notification.type];
                 const Icon = config.icon;
 

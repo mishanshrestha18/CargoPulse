@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Truck, Plane, Package, MapPin, XCircle, Users, Clock, TrendingUp, CheckCircle, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { showToast } from '@/components/ToastContainer';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -53,6 +54,7 @@ interface ActiveShipmentsListProps {
 
 export default function ActiveShipmentsList({ refreshTrigger, onShipmentChange }: ActiveShipmentsListProps) {
   const { addNotification } = useNotifications();
+  const { userRole, profile } = useAuth();
   const [shipments, setShipments] = useState<ActiveShipment[]>([]);
   const [idleDrivers, setIdleDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +62,45 @@ export default function ActiveShipmentsList({ refreshTrigger, onShipmentChange }
   const [swappingShipmentId, setSwappingShipmentId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [expandedShipmentId, setExpandedShipmentId] = useState<string | null>(null);
+  const [currentDriverId, setCurrentDriverId] = useState<string | null>(null);
+
+  // Fetch driver ID for the current user if they are a driver
+  useEffect(() => {
+    const fetchDriverId = async () => {
+      if (userRole !== 'driver' || !profile) return;
+
+      try {
+        // Try to find driver by email first
+        const { data: driverByEmail } = await supabase
+          .from('drivers')
+          .select('id')
+          .eq('email', profile.email)
+          .single();
+
+        if (driverByEmail) {
+          setCurrentDriverId(String(driverByEmail.id));
+          return;
+        }
+
+        // Fallback: try to find by name
+        if (profile.full_name) {
+          const { data: driverByName } = await supabase
+            .from('drivers')
+            .select('id')
+            .eq('name', profile.full_name)
+            .single();
+
+          if (driverByName) {
+            setCurrentDriverId(String(driverByName.id));
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching driver ID:', err);
+      }
+    };
+
+    fetchDriverId();
+  }, [userRole, profile]);
 
   const fetchData = async () => {
     try {
@@ -117,7 +158,7 @@ export default function ActiveShipmentsList({ refreshTrigger, onShipmentChange }
       });
 
       // Map the data manually
-      const mappedShipments = (shipmentsData || []).map((shipment: any) => ({
+      let mappedShipments = (shipmentsData || []).map((shipment: any) => ({
         ...shipment,
         drivers: driversMap.get(String(shipment.driver_id)) || { name: 'Unknown' },
         vehicles: vehiclesMap.get(String(shipment.vehicle_id)) || { name: 'Unknown' },
@@ -126,6 +167,13 @@ export default function ActiveShipmentsList({ refreshTrigger, onShipmentChange }
         inventory: inventoryMap.get(String(shipment.inventory_item_id)) || { item_name: 'Unknown' },
         shipment_items: shipmentItemsMap.get(String(shipment.id)) || [],
       }));
+
+      // Filter shipments for driver role - only show their own shipments
+      if (userRole === 'driver' && currentDriverId) {
+        mappedShipments = mappedShipments.filter(
+          (shipment: ActiveShipment) => String(shipment.driver_id) === currentDriverId
+        );
+      }
 
       setShipments(mappedShipments);
       setIdleDrivers(idleDriversRes.data || []);
@@ -144,7 +192,8 @@ export default function ActiveShipmentsList({ refreshTrigger, onShipmentChange }
     // Refresh every 5 seconds for real-time updates
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole, currentDriverId]);
 
   // Refetch when refreshTrigger changes
   useEffect(() => {

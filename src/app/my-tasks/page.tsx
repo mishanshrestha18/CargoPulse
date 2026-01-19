@@ -20,17 +20,18 @@ import {
 interface Shipment {
   id: number;
   status: string;
-  origin_id: number;
-  destination_id: number;
+  origin: string;
+  destination: string;
   vehicle_id: number;
   driver_id: number;
   departure_time: string;
   arrival_time: string;
   total_cost: number;
   created_at: string;
-  origin?: { name: string; city: string };
-  destination?: { name: string; city: string };
-  vehicle?: { license_plate: string; type: string };
+  shipping_method: string;
+  origin_location?: { name: string };
+  destination_location?: { name: string };
+  vehicle?: { name: string };
 }
 
 export default function MyTasksPage() {
@@ -90,12 +91,7 @@ export default function MyTasksPage() {
   const fetchShipmentsForDriver = async (driverId: number) => {
     let query = supabase
       .from('shipments')
-      .select(`
-        *,
-        origin:locations!shipments_origin_id_fkey(name, city),
-        destination:locations!shipments_destination_id_fkey(name, city),
-        vehicle:vehicles(license_plate, type)
-      `)
+      .select('*')
       .eq('driver_id', driverId)
       .order('created_at', { ascending: false });
 
@@ -106,10 +102,29 @@ export default function MyTasksPage() {
       query = query.eq('status', 'Delivered');
     }
 
-    const { data, error } = await query;
+    const { data: shipmentsData, error: shipmentsError } = await query;
 
-    if (error) throw error;
-    setShipments(data || []);
+    if (shipmentsError) throw shipmentsError;
+
+    // Fetch related data separately
+    const [locationsRes, vehiclesRes] = await Promise.all([
+      supabase.from('locations').select('id, name'),
+      supabase.from('vehicles').select('id, name'),
+    ]);
+
+    // Create lookup maps
+    const locationsMap = new Map(locationsRes.data?.map(l => [String(l.id), l]) || []);
+    const vehiclesMap = new Map(vehiclesRes.data?.map(v => [String(v.id), v]) || []);
+
+    // Map the data
+    const mappedShipments = (shipmentsData || []).map((shipment: any) => ({
+      ...shipment,
+      origin_location: locationsMap.get(String(shipment.origin)) || { name: 'Unknown' },
+      destination_location: locationsMap.get(String(shipment.destination)) || { name: 'Unknown' },
+      vehicle: vehiclesMap.get(String(shipment.vehicle_id)) || { name: 'Unknown' },
+    }));
+
+    setShipments(mappedShipments);
   };
 
   const getStatusBadge = (status: string) => {
@@ -228,7 +243,7 @@ export default function MyTasksPage() {
                       Shipment #{shipment.id}
                     </h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {shipment.vehicle?.license_plate || 'No vehicle'} - {shipment.vehicle?.type || 'Unknown'}
+                      {shipment.vehicle?.name || 'Unknown Vehicle'}
                     </p>
                   </div>
                 </div>
@@ -244,10 +259,7 @@ export default function MyTasksPage() {
                   <div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Origin</p>
                     <p className="font-medium text-gray-900 dark:text-white">
-                      {shipment.origin?.name || 'Unknown'}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {shipment.origin?.city || ''}
+                      {shipment.origin_location?.name || 'Unknown'}
                     </p>
                   </div>
                 </div>
@@ -260,10 +272,7 @@ export default function MyTasksPage() {
                   <div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Destination</p>
                     <p className="font-medium text-gray-900 dark:text-white">
-                      {shipment.destination?.name || 'Unknown'}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {shipment.destination?.city || ''}
+                      {shipment.destination_location?.name || 'Unknown'}
                     </p>
                   </div>
                 </div>

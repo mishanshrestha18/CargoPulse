@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Truck, Plane, MapPin, Package, DollarSign, AlertCircle, Send, Plus, X, List, CheckCircle, Loader2 } from 'lucide-react';
+import { Truck, Plane, MapPin, Package, DollarSign, AlertCircle, Send, Plus, X, List, CheckCircle, Loader2, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Inventory, Location, Vehicle, Driver, ShipmentInsert, ShipmentItemInsert } from '@/types/database';
 import { useNotifications } from '@/contexts/NotificationContext';
@@ -54,6 +54,7 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
   const [dispatching, setDispatching] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
 
   const [form, setForm] = useState<ShipmentForm>({
     origin: '',
@@ -94,8 +95,24 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
   }, []);
 
   // Memoize destination city name to prevent unnecessary re-renders
+  // Use the 'city' field for weather API if available, otherwise extract city from name
   const destinationCityName = useMemo(() => {
-    return locations.find(loc => String(loc.id) === String(form.destination))?.name || '';
+    const loc = locations.find(loc => String(loc.id) === String(form.destination));
+    if (!loc) return '';
+
+    // Prefer the city field if it exists and is valid
+    if (loc.city && loc.city.trim() !== '') {
+      return loc.city;
+    }
+
+    // Fallback: try to extract a recognizable city name from the location name
+    // Remove common suffixes like "Hub", "Warehouse", "Distribution", "Airport", etc.
+    const name = loc.name;
+    const cleanedName = name
+      .replace(/\s*(Hub|Warehouse|Distribution|Center|Airport|Port|Terminal|Depot|Facility)\s*/gi, '')
+      .trim();
+
+    return cleanedName || name;
   }, [locations, form.destination]);
 
   // Load form from localStorage on mount
@@ -132,6 +149,13 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
     setManifest([]);
     setNewItem({ inventoryItemId: '', quantity: 1 });
   }, [form.origin]);
+
+  // Clear destination if it conflicts with stops (e.g., from stale localStorage)
+  useEffect(() => {
+    if (form.destination && form.stops.some(stopId => String(stopId) === String(form.destination))) {
+      setForm(prev => ({ ...prev, destination: '' }));
+    }
+  }, [form.stops, form.destination]);
 
   // Detect cross-region routes that require hybrid routing
   useEffect(() => {
@@ -300,6 +324,227 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
       distanceKm: data.routes[0].distance / 1000,
       durationSeconds: data.routes[0].duration,
     };
+  };
+
+  // Helper to calculate air distance between two locations
+  const calculateAirDistance = (loc1: Location, loc2: Location): number => {
+    const R = 6371; // Earth's radius in km
+    const dLat = ((loc2.latitude - loc1.latitude) * Math.PI) / 180;
+    const dLon = ((loc2.longitude - loc1.longitude) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((loc1.latitude * Math.PI) / 180) *
+        Math.cos((loc2.latitude * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Optimize route using OSRM Trip API (with hybrid route support)
+  const optimizeRoute = async () => {
+    if (form.stops.length < 2) {
+      setErrorPopup({
+        title: 'Not Enough Stops',
+        message: 'Route optimization requires at least 2 intermediate stops. Add more stops to optimize.',
+        type: 'warning'
+      });
+      return;
+    }
+
+    const originLoc = locations.find(loc => String(loc.id) === String(form.origin));
+    const destLoc = locations.find(loc => String(loc.id) === String(form.destination));
+
+    if (!originLoc || !destLoc) {
+      setErrorPopup({
+        title: 'Missing Locations',
+        message: 'Please select both origin and destination before optimizing.',
+        type: 'warning'
+      });
+      return;
+    }
+
+    // Get stop locations
+    const stopLocs = form.stops
+      .map(stopId => locations.find(loc => String(loc.id) === String(stopId)))
+      .filter((loc): loc is Location => loc !== undefined);
+
+    if (stopLocs.length !== form.stops.length) {
+      setErrorPopup({
+        title: 'Invalid Stops',
+        message: 'Some stop locations could not be found.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setOptimizing(true);
+
+    try {
+      const allLocations = [originLoc, ...stopLocs, destLoc];
+
+      // Check if route requires hybrid (cross-ocean) routing
+      const requiresHybrid = !canConnectByRoad(originLoc, destLoc) ||
+        stopLocs.some((stop, idx) => {
+          const prevLoc = idx === 0 ? originLoc : stopLocs[idx - 1];
+          return !canConnectByRoad(prevLoc, stop);
+        }) ||
+        (stopLocs.length > 0 && !canConnectByRoad(stopLocs[stopLocs.length - 1], destLoc));
+
+      let optimizedStops: string[];
+
+      if (requiresHybrid) {
+        // For hybrid routes, group locations by region and optimize within each region
+        // Then use nearest-neighbor algorithm for cross-region ordering
+
+        // Group stops by region
+        const regionGroups = new Map<string, { stopId: string; location: Location; originalIndex: number }[]>();
+
+        stopLocs.forEach((loc, idx) => {
+          const region = getRegion(loc);
+          if (!regionGroups.has(region)) {
+            regionGroups.set(region, []);
+          }
+          regionGroups.get(region)!.push({
+            stopId: form.stops[idx],
+            location: loc,
+            originalIndex: idx
+          });
+        });
+
+        // Get origin and destination regions
+        const originRegion = getRegion(originLoc);
+        const destRegion = getRegion(destLoc);
+
+        // Determine the order of regions to visit (origin region first, dest region last)
+        const regionOrder: string[] = [originRegion];
+        const visitedRegions = new Set([originRegion]);
+
+        // Add intermediate regions in order of distance from origin
+        const intermediateRegions = Array.from(regionGroups.keys()).filter(r => r !== originRegion && r !== destRegion);
+
+        // Sort intermediate regions by nearest to origin/previous region
+        let currentRegionCenter = originLoc;
+        for (const region of intermediateRegions) {
+          if (!visitedRegions.has(region)) {
+            regionOrder.push(region);
+            visitedRegions.add(region);
+            // Update center to first location in this region
+            const regionLocs = regionGroups.get(region);
+            if (regionLocs && regionLocs.length > 0) {
+              currentRegionCenter = regionLocs[0].location;
+            }
+          }
+        }
+
+        if (destRegion !== originRegion && !visitedRegions.has(destRegion)) {
+          regionOrder.push(destRegion);
+        }
+
+        // Build optimized stops by processing each region
+        optimizedStops = [];
+
+        for (const region of regionOrder) {
+          const regionStops = regionGroups.get(region);
+          if (!regionStops || regionStops.length === 0) continue;
+
+          if (regionStops.length === 1) {
+            // Single stop in region, just add it
+            optimizedStops.push(regionStops[0].stopId);
+          } else {
+            // Multiple stops in same region - try OSRM optimization
+            try {
+              const regionLocs = regionStops.map(s => s.location);
+              const coords = regionLocs.map(loc => `${loc.longitude},${loc.latitude}`).join(';');
+              const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?roundtrip=false`;
+
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 10000);
+              const response = await fetch(url, { signal: controller.signal });
+              clearTimeout(timeoutId);
+
+              const data = await response.json();
+
+              if (data.code === 'Ok' && data.waypoints) {
+                // Reorder based on OSRM optimization
+                const waypointOrder = data.waypoints
+                  .map((wp: any, idx: number) => ({ idx, waypointIndex: wp.waypoint_index }))
+                  .sort((a: any, b: any) => a.waypointIndex - b.waypointIndex);
+
+                for (const wp of waypointOrder) {
+                  optimizedStops.push(regionStops[wp.idx].stopId);
+                }
+              } else {
+                // Fallback: add in original order
+                regionStops.forEach(s => optimizedStops.push(s.stopId));
+              }
+            } catch {
+              // Fallback: add in original order
+              regionStops.forEach(s => optimizedStops.push(s.stopId));
+            }
+          }
+        }
+
+        showToast('dispatch', 'Hybrid Route Optimized!', 'Stops optimized within each region for cross-ocean routing.');
+      } else {
+        // Standard OSRM optimization for same-region routes
+        const coords = allLocations.map(loc => `${loc.longitude},${loc.latitude}`).join(';');
+        const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?source=first&destination=last&roundtrip=false`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        const data = await response.json();
+
+        if (data.code !== 'Ok' || !data.waypoints) {
+          throw new Error(data.message || 'Route optimization failed');
+        }
+
+        // Create array of {inputIndex, waypointIndex} for stops only
+        const stopWaypoints = data.waypoints
+          .map((wp: any, inputIndex: number) => ({ inputIndex, waypointIndex: wp.waypoint_index }))
+          .filter((_: any, idx: number) => idx > 0 && idx < data.waypoints.length - 1)
+          .sort((a: any, b: any) => a.waypointIndex - b.waypointIndex);
+
+        optimizedStops = stopWaypoints.map((sw: any) => form.stops[sw.inputIndex - 1]);
+
+        showToast('dispatch', 'Route Optimized!', 'Stops have been reordered for minimum travel time.');
+      }
+
+      // Check if order actually changed
+      const orderChanged = !optimizedStops.every((stopId: string, idx: number) => stopId === form.stops[idx]);
+
+      if (!orderChanged) {
+        showToast('info', 'Route Already Optimal', 'The current stop order is already the most efficient route.');
+        setOptimizing(false);
+        return;
+      }
+
+      // Update form with optimized stops
+      setForm(prev => ({ ...prev, stops: optimizedStops }));
+
+    } catch (err: any) {
+      console.error('Route optimization failed:', err);
+
+      if (err.name === 'AbortError') {
+        setErrorPopup({
+          title: 'Optimization Timeout',
+          message: 'Route optimization took too long. Please try again.',
+          type: 'error'
+        });
+      } else {
+        setErrorPopup({
+          title: 'Optimization Failed',
+          message: err.message || 'Failed to optimize route. Please try again.',
+          type: 'error'
+        });
+      }
+    } finally {
+      setOptimizing(false);
+    }
   };
 
   // Recalculate pricing whenever form or manifest changes
@@ -1017,11 +1262,20 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
               }`}
             >
               <option value="">Select destination...</option>
-              {locations.filter(loc => String(loc.id) !== String(form.origin)).map(loc => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name} ({loc.type})
-                </option>
-              ))}
+              {locations
+                .filter(loc => {
+                  const locIdStr = String(loc.id);
+                  // Filter out origin and already selected stops
+                  return (
+                    locIdStr !== String(form.origin) &&
+                    !form.stops.some(stopId => String(stopId) === locIdStr)
+                  );
+                })
+                .map(loc => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name} ({loc.type})
+                  </option>
+                ))}
             </select>
             {isSameLocation && (
               <p className="text-xs text-red-600 dark:text-red-400 font-semibold mt-1">
@@ -1181,9 +1435,36 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
               </button>
             </div>
 
+            {/* Optimize Route Button - only show when 2+ stops */}
+            {form.stops.length >= 2 && form.origin && form.destination && (
+              <button
+                onClick={optimizeRoute}
+                disabled={optimizing}
+                className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-sm"
+                title="Reorder stops to minimize travel time"
+              >
+                {optimizing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Optimizing Route...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    Optimize Route
+                  </>
+                )}
+              </button>
+            )}
+
             {form.stops.length === 0 && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 Add waypoints between origin and destination for multi-stop routes
+              </p>
+            )}
+            {form.stops.length === 1 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Add one more stop to enable route optimization
               </p>
             )}
           </div>

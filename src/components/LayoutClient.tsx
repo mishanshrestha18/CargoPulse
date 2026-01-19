@@ -45,7 +45,15 @@ function AuthGuard({ children }: { children: ReactNode }) {
 
 function LayoutContent({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { unreadCount } = useNotifications();
+  const { notifications, unreadCount } = useNotifications();
+  const { userRole } = useAuth();
+
+  // Filter notifications based on user role
+  // Drivers should NOT see arrival/cancel notifications (those are for admin/dispatcher only)
+  const isDriver = userRole === 'driver';
+  const filteredUnreadCount = isDriver
+    ? notifications.filter(n => !n.read && !['arrival', 'cancel'].includes(n.type)).length
+    : unreadCount;
 
   return (
     <>
@@ -53,25 +61,28 @@ function LayoutContent({ children }: { children: ReactNode }) {
       <ToastContainer />
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900 relative">
-          {/* Notification Bell Icon - positioned to not overlap with refresh button */}
-          <div className="absolute top-4 right-20 z-30">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Fixed Top Header Bar with Notification Bell */}
+          <header className="h-14 min-h-[56px] bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-end px-6 z-20">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="relative p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-md transition-colors"
+              className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               title="Open notifications"
             >
               <Bell className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-              {unreadCount > 0 && (
+              {filteredUnreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-red-600 rounded-full animate-pulse">
-                  {unreadCount > 9 ? '9+' : unreadCount}
+                  {filteredUnreadCount > 9 ? '9+' : filteredUnreadCount}
                 </span>
               )}
             </button>
-          </div>
+          </header>
 
-          {children}
-        </main>
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+            {children}
+          </main>
+        </div>
       </div>
       <NotificationSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
     </>
