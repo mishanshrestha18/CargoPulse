@@ -52,10 +52,23 @@ export interface Driver {
 
 export type DriverInsert = Omit<Driver, 'id' | 'created_at'>;
 
+export interface Pilot {
+  id: string;
+  created_at: string;
+  name: string;
+  status: 'Idle' | 'Busy';
+  phone?: string;
+  license_number?: string;
+  certifications?: string; // e.g., "ATP, CFI, Multi-Engine"
+}
+
+export type PilotInsert = Omit<Pilot, 'id' | 'created_at'>;
+
 export interface Shipment {
   id: string;
   created_at: string;
   driver_id: string;
+  pilot_id?: string; // For plane or hybrid routes
   vehicle_id: string;
   origin: string;
   destination: string;

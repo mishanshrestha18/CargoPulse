@@ -42,6 +42,7 @@ const navigation: NavigationItem[] = [
   { name: 'Fleet', href: '/fleet', icon: Truck, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Airplanes', href: '/airplanes', icon: Plane, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Drivers', href: '/drivers', icon: Users, allowedRoles: ['admin', 'dispatcher'] },
+  { name: 'Pilots', href: '/pilots', icon: Plane, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Warehouse', href: '/warehouse', icon: Warehouse, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'My Tasks', href: '/my-tasks', icon: ClipboardList, allowedRoles: ['driver'] },
   { name: 'Expenses', href: '/expenses', icon: Receipt, allowedRoles: ['admin', 'driver'] },

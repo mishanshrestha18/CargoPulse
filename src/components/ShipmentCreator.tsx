@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Truck, Plane, MapPin, Package, DollarSign, AlertCircle, Send, Plus, X, List, CheckCircle, Loader2, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Inventory, Location, Vehicle, Driver, ShipmentInsert, ShipmentItemInsert } from '@/types/database';
+import type { Inventory, Location, Vehicle, Driver, Pilot, ShipmentInsert, ShipmentItemInsert } from '@/types/database';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { showToast } from '@/components/ToastContainer';
 import { getDistance } from 'geolib';
@@ -26,6 +26,7 @@ interface ShipmentForm {
   stops: string[]; // Array of location IDs for intermediate stops
   vehicleId: string;
   driverId: string;
+  pilotId: string; // For hybrid routes that need both driver and pilot
   urgency: 'standard' | 'express';
   shippingMethod: 'truck' | 'plane';
 }
@@ -50,6 +51,7 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
   const [locations, setLocations] = useState<Location[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [pilots, setPilots] = useState<Pilot[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
@@ -62,6 +64,7 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
     stops: [],
     vehicleId: '',
     driverId: '',
+    pilotId: '',
     urgency: 'standard',
     shippingMethod: 'truck',
   });
@@ -122,10 +125,11 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
       try {
         const parsed = JSON.parse(savedForm);
         const loadedForm = parsed.form || parsed;
-        // Ensure stops array exists for backward compatibility
+        // Ensure stops array and pilotId exist for backward compatibility
         setForm({
           ...loadedForm,
           stops: loadedForm.stops || [],
+          pilotId: loadedForm.pilotId || '',
         });
         setManifest(parsed.manifest || []);
       } catch (err) {
@@ -209,29 +213,63 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
         ...prev,
         shippingMethod: shouldUsePlane ? 'plane' : 'truck',
         vehicleId: '',
+        // Reset driver/pilot selections when shipping method changes
+        driverId: '',
+        pilotId: '',
       }));
     }
   }, [form.origin, form.destination, locations]);
+
+  // Auto-select idle driver/pilot based on route type and shipping method
+  useEffect(() => {
+    if (!form.origin || !form.destination) return;
+
+    if (routeInfo?.requiresHybrid) {
+      // Hybrid route: auto-select both driver AND pilot
+      setForm(prev => ({
+        ...prev,
+        driverId: prev.driverId || (drivers.length > 0 ? String(drivers[0].id) : ''),
+        pilotId: prev.pilotId || (pilots.length > 0 ? String(pilots[0].id) : ''),
+      }));
+    } else if (form.shippingMethod === 'plane') {
+      // Plane-only route: auto-select pilot (stored in driverId for backwards compat), clear pilotId
+      setForm(prev => ({
+        ...prev,
+        driverId: prev.driverId || (pilots.length > 0 ? String(pilots[0].id) : ''),
+        pilotId: '',
+      }));
+    } else {
+      // Truck-only route: auto-select driver, clear pilot
+      setForm(prev => ({
+        ...prev,
+        driverId: prev.driverId || (drivers.length > 0 ? String(drivers[0].id) : ''),
+        pilotId: '',
+      }));
+    }
+  }, [form.origin, form.destination, form.shippingMethod, routeInfo?.requiresHybrid, drivers, pilots]);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
 
-      const [locationsRes, vehiclesRes, driversRes, inventoryRes] = await Promise.all([
+      const [locationsRes, vehiclesRes, driversRes, pilotsRes, inventoryRes] = await Promise.all([
         supabase.from('locations').select('*').order('name'),
         supabase.from('vehicles').select('*').order('name'),
         supabase.from('drivers').select('*').eq('status', 'Idle').order('name'),
+        supabase.from('pilots').select('*').eq('status', 'Idle').order('name'),
         supabase.from('inventory').select('*').order('item_name'),
       ]);
 
       if (locationsRes.error) throw locationsRes.error;
       if (vehiclesRes.error) throw vehiclesRes.error;
       if (driversRes.error) throw driversRes.error;
+      // Pilots table might not exist yet, so don't throw on error
       if (inventoryRes.error) throw inventoryRes.error;
 
       setLocations(locationsRes.data || []);
       setVehicles(vehiclesRes.data || []);
       setDrivers(driversRes.data || []);
+      setPilots(pilotsRes.data || []);
       setInventory(inventoryRes.data || []);
     } catch (err) {
       console.error('Failed to fetch data:', err);
@@ -1122,6 +1160,7 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
         stops: [],
         vehicleId: '',
         driverId: '',
+        pilotId: '',
         urgency: 'standard',
         shippingMethod: 'truck',
       });
@@ -1172,6 +1211,10 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
     return isMatch && v.status === 'Idle';
   });
 
+  // Pilots come from separate pilots table, drivers from drivers table
+  const filteredPilots = pilots;
+  const filteredDrivers = drivers;
+
   const handleClearForm = () => {
     if (confirm('Are you sure you want to clear the form and manifest?')) {
       setForm({
@@ -1180,6 +1223,7 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
         stops: [],
         vehicleId: '',
         driverId: '',
+        pilotId: '',
         urgency: 'standard',
         shippingMethod: 'truck',
       });
@@ -1469,8 +1513,8 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
             )}
           </div>
 
-          {/* Weather Card - Real-Time Weather Integration */}
-          {form.destination && destinationCityName && (
+          {/* Weather Card - Only show when destination is selected and no intermediate stops */}
+          {form.destination && destinationCityName && form.stops.length === 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Destination Weather
@@ -1533,28 +1577,109 @@ export default function ShipmentCreator({ refreshTrigger, onDispatchSuccess }: S
             )}
           </div>
 
-          {/* Driver Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              <Truck className="w-4 h-4 inline mr-1" />
-              Select {form.shippingMethod === 'plane' ? 'Pilot' : 'Driver'}
-            </label>
-            <select
-              value={form.driverId}
-              onChange={(e) => setForm({ ...form, driverId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
-            >
-              <option value="">Select {form.shippingMethod === 'plane' ? 'pilot' : 'driver'}...</option>
-              {drivers.map(driver => (
-                <option key={driver.id} value={driver.id}>
-                  {driver.name} {driver.phone ? `- ${driver.phone}` : ''}
-                </option>
-              ))}
-            </select>
-            {drivers.length === 0 && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No idle {form.shippingMethod === 'plane' ? 'pilots' : 'drivers'} available</p>
-            )}
-          </div>
+          {/* Driver/Pilot Selection - Based on shipping method and route type */}
+          {routeInfo?.requiresHybrid ? (
+            // Hybrid route: Show both driver AND pilot selection
+            <div className="space-y-3">
+              <div className="px-3 py-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                <p className="text-xs text-purple-700 dark:text-purple-300 font-medium">
+                  Hybrid Route: Requires both a driver (ground) and pilot (air segment)
+                </p>
+              </div>
+
+              {/* Driver for ground segment */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <Truck className="w-4 h-4 inline mr-1" />
+                  Select Driver (Ground Segment)
+                </label>
+                <select
+                  value={form.driverId}
+                  onChange={(e) => setForm({ ...form, driverId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+                >
+                  <option value="">Select driver...</option>
+                  {filteredDrivers.map(driver => (
+                    <option key={driver.id} value={driver.id}>
+                      {driver.name} {driver.phone ? `- ${driver.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {filteredDrivers.length === 0 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No idle drivers available</p>
+                )}
+              </div>
+
+              {/* Pilot for air segment */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <Plane className="w-4 h-4 inline mr-1" />
+                  Select Pilot (Air Segment)
+                </label>
+                <select
+                  value={form.pilotId}
+                  onChange={(e) => setForm({ ...form, pilotId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+                >
+                  <option value="">Select pilot...</option>
+                  {filteredPilots.map(pilot => (
+                    <option key={pilot.id} value={pilot.id}>
+                      {pilot.name} {pilot.phone ? `- ${pilot.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {filteredPilots.length === 0 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No idle pilots available</p>
+                )}
+              </div>
+            </div>
+          ) : form.shippingMethod === 'plane' ? (
+            // Plane only: Show pilot selection
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <Plane className="w-4 h-4 inline mr-1" />
+                Select Pilot
+              </label>
+              <select
+                value={form.driverId}
+                onChange={(e) => setForm({ ...form, driverId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+              >
+                <option value="">Select pilot...</option>
+                {filteredPilots.map(pilot => (
+                  <option key={pilot.id} value={pilot.id}>
+                    {pilot.name} {pilot.phone ? `- ${pilot.phone}` : ''}
+                  </option>
+                ))}
+              </select>
+              {filteredPilots.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No idle pilots available</p>
+              )}
+            </div>
+          ) : (
+            // Truck only: Show driver selection
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <Truck className="w-4 h-4 inline mr-1" />
+                Select Driver
+              </label>
+              <select
+                value={form.driverId}
+                onChange={(e) => setForm({ ...form, driverId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
+              >
+                <option value="">Select driver...</option>
+                {filteredDrivers.map(driver => (
+                  <option key={driver.id} value={driver.id}>
+                    {driver.name} {driver.phone ? `- ${driver.phone}` : ''}
+                  </option>
+                ))}
+              </select>
+              {filteredDrivers.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">No idle drivers available</p>
+              )}
+            </div>
+          )}
 
           {/* Urgency */}
           <div>
