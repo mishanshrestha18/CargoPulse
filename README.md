@@ -7,7 +7,9 @@ scheduling, and operational analytics.
 Built with Next.js 16, React 19, TypeScript and Supabase.
 
 > **Status:** personal project, actively developed.
-> Live demo: _coming soon_
+> **Live demo: https://cargopulse-mishan.netlify.app**
+>
+> Demo accounts — `admin@cargopulse.com` (admin), `james.wilson@cargopulse.com` (driver).
 
 ---
 
