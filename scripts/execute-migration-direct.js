@@ -2,8 +2,12 @@
 const https = require('https');
 
 const supabaseUrl = 'gwkugefxjpocjwaymvjw.supabase.co';
-const serviceRoleKey = '***REMOVED-SUPABASE-KEY***';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error('\u274c Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local');
+  process.exit(1);
+}
 const sql = `
 ALTER TABLE shipment_items ADD COLUMN IF NOT EXISTS delivery_location_id BIGINT;
 ALTER TABLE shipment_items ADD CONSTRAINT IF NOT EXISTS shipment_items_delivery_location_fkey FOREIGN KEY (delivery_location_id) REFERENCES locations(id) ON DELETE SET NULL;
