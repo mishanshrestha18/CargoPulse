@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CargoPulse
 
-## Getting Started
+A full stack logistics and fleet management platform for tracking shipments across road and air
+freight — covering multi-stop routing, fleet and driver records, warehouse inventory, maintenance
+scheduling, and operational analytics.
 
-First, run the development server:
+Built with Next.js 16, React 19, TypeScript and Supabase.
+
+> **Status:** personal project, actively developed.
+> Live demo: _coming soon_
+
+---
+
+## Features
+
+**Shipment tracking**
+- Multi-stop shipments with per-stop status progression and an itemised manifest
+- Algorithmic route optimisation via the **OSRM Trip API**
+- Real-time vehicle movement simulation using **Turf.js** great-circle interpolation
+- Interactive map views built on **Leaflet** / react-leaflet
+
+**Fleet & operations**
+- Vehicle, driver and pilot records with assignment tracking
+- Maintenance history and scheduling per vehicle
+- Warehouse inventory management
+- Expense tracking with reporting
+
+**Analytics & reporting**
+- Operational dashboards built with **Recharts**
+- PDF export of shipment and expense reports via **jsPDF**
+
+**Access control**
+- Supabase Auth with email/password and password recovery
+- Role-based access separating operator, driver and client views
+- **Row Level Security enforced on all 13 tables** — authorisation lives in the database,
+  not only in the UI layer
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 16 (App Router), React 19 |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| Database | Supabase / PostgreSQL |
+| Auth | Supabase Auth + Row Level Security |
+| Mapping | Leaflet, react-leaflet, Turf.js, geolib |
+| Routing engine | OSRM Trip API |
+| Charts / export | Recharts, jsPDF |
+
+---
+
+## Architecture notes
+
+The PostgreSQL schema spans 13 related tables — `shipments`, `shipment_stops`, `shipment_items`,
+`vehicles`, `drivers`, `pilots`, `locations`, `inventory`, `expenses`, `maintenance_logs`,
+`notifications`, `activity_logs` and `profiles`.
+
+Every table has Row Level Security enabled, so a compromised client key cannot read data the
+signed-in user isn't entitled to. Policies are the authorisation boundary; the UI reflects them
+rather than enforcing them.
+
+Route optimisation calls OSRM's Trip endpoint to solve stop ordering, then Turf.js interpolates
+positions along the returned geometry to animate vehicle movement between updates.
+
+---
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 20+
+- A Supabase project
+
+### Setup
+
+```bash
+git clone https://github.com/mishanshrestha18/CargoPulse.git
+cd cargo-pulse
+npm install
+```
+
+Create `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> **Note on credentials.** The `SUPABASE_SERVICE_ROLE_KEY` bypasses Row Level Security entirely.
+> It is only read by maintenance scripts in `scripts/` and must never be committed or exposed to
+> the browser. Only the `NEXT_PUBLIC_*` values are safe client-side.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Maintenance scripts
 
-## Learn More
+Utilities in `scripts/` handle migrations, schema checks and seed data. They read credentials from
+`.env.local` and exit with a clear error if the environment is not configured:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+node scripts/verify-tables.js
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Licence
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Released under the MIT Licence.
