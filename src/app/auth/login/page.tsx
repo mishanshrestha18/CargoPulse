@@ -6,12 +6,53 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { LogIn, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
 
+const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? '';
+
+const DEMO_ACCOUNTS = [
+  { role: 'Admin', email: 'admin@cargopulse.com' },
+  { role: 'Dispatcher', email: 'mike.johnson@cargopulse.com' },
+  { role: 'Driver', email: 'james.wilson@cargopulse.com' },
+];
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleDemoLogin = async (demoEmail: string) => {
+    setEmail(demoEmail);
+    setPassword(DEMO_PASSWORD);
+
+    if (!DEMO_PASSWORD) {
+      setError('Demo sign-in is not configured. Enter a password manually to continue.');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: demoEmail,
+        password: DEMO_PASSWORD,
+      });
+
+      if (signInError) {
+        setError(signInError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        window.location.href = '/';
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+      setLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,13 +202,30 @@ export default function LoginPage() {
 
         {/* Demo Credentials */}
         <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <p className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">
-            Demo Credentials:
+          <p className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-1">
+            Try the demo
           </p>
-          <div className="text-xs text-blue-700 dark:text-blue-400 space-y-1">
-            <p>Admin: admin@cargopulse.com</p>
-            <p>Dispatcher: mike.johnson@cargopulse.com</p>
-            <p>Driver: james.wilson@cargopulse.com</p>
+          <p className="text-xs text-blue-700 dark:text-blue-400 mb-3">
+            One click signs you in with sample data — no account needed. Each role sees a
+            different view.
+          </p>
+          <div className="space-y-2">
+            {DEMO_ACCOUNTS.map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                onClick={() => handleDemoLogin(account.email)}
+                disabled={loading}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800 text-left hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-60 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <span className="text-sm font-medium text-blue-900 dark:text-blue-300">
+                  Sign in as {account.role}
+                </span>
+                <span className="text-xs text-blue-600 dark:text-blue-400 truncate">
+                  {account.email}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       </div>
