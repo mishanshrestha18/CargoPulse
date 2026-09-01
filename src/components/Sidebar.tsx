@@ -35,7 +35,7 @@ interface NavigationItem {
 }
 
 const navigation: NavigationItem[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, allowedRoles: ['admin', 'dispatcher'] },
   { name: 'Shipments', href: '/shipments', icon: Package },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, allowedRoles: ['admin'] },
   { name: 'Locations', href: '/locations', icon: MapPin, allowedRoles: ['admin', 'dispatcher'] },
@@ -56,6 +56,9 @@ export default function Sidebar() {
   const [showSignOutModal, setShowSignOutModal] = useState(false);
 
   // Filter navigation based on user role
+  // Drivers have no dashboard, so the logo takes them to their task list instead.
+  const homeHref = userRole === 'driver' ? '/my-tasks' : '/';
+
   const filteredNavigation = navigation.filter((item) => {
     // If no roles specified, show to everyone
     if (!item.allowedRoles) return true;
@@ -78,7 +81,7 @@ export default function Sidebar() {
       {/* Header with Logo and Theme Toggle */}
       <div className="flex h-16 items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4">
         {!isCollapsed && (
-          <Link href="/" className="hover:opacity-80 transition-opacity">
+          <Link href={homeHref} className="hover:opacity-80 transition-opacity">
             <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">CargoPulse</h1>
           </Link>
         )}
@@ -95,7 +98,7 @@ export default function Sidebar() {
             )}
           </button>
           {isCollapsed && (
-            <Link href="/" className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+            <Link href={homeHref} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
               <LayoutDashboard className="h-5 w-5 text-gray-900 dark:text-gray-100" />
             </Link>
           )}

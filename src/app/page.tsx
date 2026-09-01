@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import AddLocationForm from './components/AddLocationForm';
 import DashboardStats from '@/components/DashboardStats';
@@ -21,7 +22,16 @@ const MapWithLiveTracking = dynamic(() => import('@/components/MapWithLiveTracki
 
 export default function Home() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const { userRole } = useAuth();
+  const { userRole, loading } = useAuth();
+  const router = useRouter();
+
+  // Drivers do not get the dashboard. Everything here is fleet-wide, and a driver
+  // should only ever see the jobs assigned to them.
+  useEffect(() => {
+    if (!loading && userRole === 'driver') {
+      router.replace('/my-tasks');
+    }
+  }, [loading, userRole, router]);
 
   const handleRefreshAll = () => {
     setRefreshTrigger(prev => prev + 1);
@@ -33,6 +43,10 @@ export default function Home() {
   const isDriver = userRole === 'driver';
   const canViewAnalytics = isAdmin || isDispatcher;
   const canDispatch = isAdmin || isDispatcher;
+
+  if (loading || userRole === 'driver') {
+    return null;
+  }
 
   return (
     <div className="p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
