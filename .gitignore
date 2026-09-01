@@ -42,3 +42,12 @@ next-env.d.ts
 
 # Local Netlify folder
 .netlify
+
+# env files (can opt-in for committing if needed)
+!.env.example
+
+# local AI tooling config
+.claude/
+.claude.json
+.mcp.json
+deno.lock
