@@ -207,16 +207,7 @@ export default function LoginPage() {
           </p>
           <p className="text-xs text-blue-700 dark:text-blue-400 mb-3">
             One click signs you in with sample data, no account needed. Each role sees a
-            different view. Account details are in the{' '}
-            <a
-              href="https://github.com/mishanshrestha18/CargoPulse#readme"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2 hover:text-blue-900 dark:hover:text-blue-300"
-            >
-              README
-            </a>
-            .
+            different view.
           </p>
           <div className="space-y-2">
             {DEMO_ACCOUNTS.map((account) => (

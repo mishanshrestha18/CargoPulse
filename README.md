@@ -9,18 +9,13 @@ Built with Next.js 16, React 19, TypeScript and Supabase.
 > **Status:** personal project, actively developed.
 > **Live demo: https://cargopulse-mishan.netlify.app**
 >
-> **Try it without signing up.** The login page has one-click buttons for each role, or sign
-> in manually with the accounts below. Password for all three: `CargoPulseDemo2026!`
+> **Try it without signing up.** The login page has a one-click button for each role, so you
+> can sign in as an admin, a dispatcher or a driver and see how the views differ. No account
+> or credentials needed.
 >
-> | Role | Email | What you see |
-> |---|---|---|
-> | Admin | `admin@cargopulse.com` | Everything: shipments, fleet, drivers, inventory, analytics |
-> | Dispatcher | `mike.johnson@cargopulse.com` | Shipment and routing operations |
-> | Driver | `james.wilson@cargopulse.com` | Only the jobs assigned to that driver |
->
-> These are throwaway accounts on a demo database, published so the project can be reviewed.
 > Access is enforced by Row Level Security at the database, so the driver account cannot read
 > another driver's shipments even by calling the API directly.
+
 
 ---
 
